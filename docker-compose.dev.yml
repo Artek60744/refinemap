@@ -1,0 +1,21 @@
+# Dev overlay: mounts the source into the running container and enables
+# uvicorn's auto-reload, so a file sync is enough to pick up code changes.
+#
+# Used automatically by ./deploy.sh dev and ./deploy.sh sync.
+# Never applied by ./deploy.sh deploy, which rebuilds the image instead.
+services:
+  app:
+    volumes:
+      - ./src:/app/src
+      - ./prompts:/app/prompts
+      - ./contracts:/app/contracts
+    command:
+      - uvicorn
+      - src.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /app/src

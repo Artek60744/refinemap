@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('app.name') }}{% endblock %}
+
+{% block content %}
+<section class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-slate-950/50">
+        <div class="mb-6">
+            <p class="text-sm text-violet-300">{{ t('home.eyebrow') }}</p>
+            <h3 class="text-2xl font-semibold tracking-tight">{{ t('home.title') }}</h3>
+            <p class="mt-2 text-sm text-slate-400">{{ t('home.subtitle') }}</p>
+        </div>
+
+        <form id="start-session-form" class="space-y-5">
+            <div>
+                <label for="work-item-search" class="mb-2 block text-sm font-medium text-slate-200">{{ t('home.search_label') }}</label>
+                <div class="flex gap-3">
+                    <input id="work-item-search" type="text" placeholder="{{ t('home.search_placeholder') }}" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 placeholder:text-slate-500 focus:border-violet-400 focus:outline-none">
+                    <button type="button" id="search-work-items" class="rounded-xl bg-violet-500 px-4 py-3 font-medium text-white hover:bg-violet-400">{{ t('home.search_button') }}</button>
+                </div>
+            </div>
+
+            <div id="search-results" class="space-y-3"></div>
+
+            <input type="hidden" id="selected-work-item-id" name="workItemId">
+
+            <div>
+                <label for="extra-context" class="mb-2 block text-sm font-medium text-slate-200">{{ t('home.extra_context') }}</label>
+                <textarea id="extra-context" rows="6" placeholder="{{ t('home.extra_context_placeholder') }}" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 placeholder:text-slate-500 focus:border-violet-400 focus:outline-none"></textarea>
+            </div>
+
+            <div class="grid gap-4 md:grid-cols-2">
+                <div>
+                    <label for="max-rounds" class="mb-2 block text-sm font-medium text-slate-200">{{ t('home.max_rounds') }}</label>
+                    <input id="max-rounds" type="number" min="1" max="5" value="3" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 focus:border-violet-400 focus:outline-none">
+                </div>
+                <div>
+                    <label for="max-questions" class="mb-2 block text-sm font-medium text-slate-200">{{ t('home.max_questions') }}</label>
+                    <input id="max-questions" type="number" min="1" max="8" value="6" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 focus:border-violet-400 focus:outline-none">
+                </div>
+            </div>
+
+            <button type="submit" class="inline-flex items-center rounded-xl bg-emerald-500 px-5 py-3 font-medium text-slate-950 hover:bg-emerald-400">{{ t('home.submit') }}</button>
+        </form>
+    </div>
+
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
+        <p class="text-sm text-violet-300">{{ t('home.workflow.eyebrow') }}</p>
+        <h3 class="text-2xl font-semibold tracking-tight">{{ t('home.workflow.title') }}</h3>
+        <ol class="mt-5 space-y-4 text-sm text-slate-300">
+            <li class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">{{ t('home.workflow.step1') }}</li>
+            <li class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">{{ t('home.workflow.step2') }}</li>
+            <li class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">{{ t('home.workflow.step3') }}</li>
+            <li class="rounded-xl border border-slate-800 bg-slate-950/50 p-4">{{ t('home.workflow.step4') }}</li>
+        </ol>
+        <div class="mt-6 rounded-xl border border-violet-500/20 bg-violet-500/10 p-4 text-sm text-violet-100">
+            {{ t('home.workflow.note') }}
+        </div>
+    </div>
+</section>
+{% endblock %}

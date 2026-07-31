@@ -1,0 +1,189 @@
+{% if artifact %}
+<div class="space-y-6">
+    <section class="rounded-xl border border-slate-800 bg-slate-950/50 p-5">
+        <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.summary') }}</p>
+        <p class="text-sm leading-6 text-slate-200">{{ artifact.summary }}</p>
+    </section>
+
+    <section class="grid gap-4 lg:grid-cols-2">
+        <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-5">
+            <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.in_scope') }}</p>
+            <ul class="space-y-2 text-sm text-slate-300">
+                {% for item in artifact.scope['inScope'] %}
+                <li class="rounded-lg border border-slate-800 bg-slate-900/70 p-3">{{ item }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-5">
+            <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.out_of_scope') }}</p>
+            <ul class="space-y-2 text-sm text-slate-300">
+                {% for item in artifact.scope['outOfScope'] %}
+                <li class="rounded-lg border border-slate-800 bg-slate-900/70 p-3">{{ item }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </section>
+
+    <section class="rounded-xl border border-slate-800 bg-slate-950/50 p-5">
+        <div class="mb-4 flex items-center justify-between gap-3">
+            <div>
+                <p class="text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.proposed_split') }}</p>
+                <h5 class="text-lg font-semibold text-slate-100">{{ t('artifact.story_count', count=artifact.proposedSplit.storyCount) }}</h5>
+            </div>
+        </div>
+        <p class="mb-4 text-sm text-slate-300">{{ artifact.proposedSplit.rationale }}</p>
+        <div class="space-y-4">
+            {% for story in artifact.proposedSplit.stories %}
+            <article class="rounded-xl border border-slate-800 bg-slate-900/70 p-5">
+                <h6 class="text-base font-semibold text-slate-100">{{ loop.index }}. {{ story.title }}</h6>
+                <p class="mt-2 text-sm text-slate-300">{{ story.goal }}</p>
+
+                <div class="mt-4 grid gap-4 xl:grid-cols-2">
+                    <div>
+                        <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.acceptance_criteria') }}</p>
+                        <ul class="space-y-2 text-sm text-slate-300">
+                            {% for item in story.acceptanceCriteria %}
+                            <li class="rounded-lg border border-slate-800 bg-slate-950/60 p-3">{{ item }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <div>
+                        <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.technical_notes') }}</p>
+                        <ul class="space-y-2 text-sm text-slate-300">
+                            {% for item in story.technicalNotes %}
+                            <li class="rounded-lg border border-slate-800 bg-slate-950/60 p-3">{{ item }}</li>
+                            {% else %}
+                            <li class="text-slate-500">{{ t('artifact.no_technical_notes') }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="grid gap-4 xl:grid-cols-2">
+        <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-5">
+            <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.known_facts') }}</p>
+            <ul class="space-y-2 text-sm text-slate-300">
+                {% for item in artifact.knownFacts %}
+                <li class="rounded-lg border border-slate-800 bg-slate-900/70 p-3">{{ item }}</li>
+                {% else %}
+                <li class="text-slate-500">{{ t('artifact.no_known_facts') }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-5">
+            <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.assumptions') }}</p>
+            <ul class="space-y-2 text-sm text-slate-300">
+                {% for item in artifact.assumptions %}
+                <li class="rounded-lg border border-slate-800 bg-slate-900/70 p-3">{{ item }}</li>
+                {% else %}
+                <li class="text-slate-500">{{ t('artifact.no_assumptions') }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </section>
+
+    <section class="grid gap-4 xl:grid-cols-2">
+        <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-5">
+            <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.cross_cutting') }}</p>
+            <div class="space-y-4 text-sm text-slate-300">
+                <div>
+                    <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.concern.testing') }}</p>
+                    <ul class="space-y-2">
+                        {% for item in artifact.crossCuttingConcerns.testing %}
+                        <li class="rounded-lg border border-slate-800 bg-slate-900/70 p-3">{{ item }}</li>
+                        {% else %}
+                        <li class="text-slate-500">{{ t('artifact.no_item') }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div>
+                    <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.concern.cicd') }}</p>
+                    <ul class="space-y-2">
+                        {% for item in artifact.crossCuttingConcerns.cicd %}
+                        <li class="rounded-lg border border-slate-800 bg-slate-900/70 p-3">{{ item }}</li>
+                        {% else %}
+                        <li class="text-slate-500">{{ t('artifact.no_item') }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div>
+                    <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.concern.infra') }}</p>
+                    <ul class="space-y-2">
+                        {% for item in artifact.crossCuttingConcerns.infra %}
+                        <li class="rounded-lg border border-slate-800 bg-slate-900/70 p-3">{{ item }}</li>
+                        {% else %}
+                        <li class="text-slate-500">{{ t('artifact.no_item') }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div>
+                    <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.concern.data') }}</p>
+                    <ul class="space-y-2">
+                        {% for item in artifact.crossCuttingConcerns.data %}
+                        <li class="rounded-lg border border-slate-800 bg-slate-900/70 p-3">{{ item }}</li>
+                        {% else %}
+                        <li class="text-slate-500">{{ t('artifact.no_item') }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div>
+                    <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.concern.security') }}</p>
+                    <ul class="space-y-2">
+                        {% for item in artifact.crossCuttingConcerns.security %}
+                        <li class="rounded-lg border border-slate-800 bg-slate-900/70 p-3">{{ item }}</li>
+                        {% else %}
+                        <li class="text-slate-500">{{ t('artifact.no_item') }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div>
+                    <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.concern.observability') }}</p>
+                    <ul class="space-y-2">
+                        {% for item in artifact.crossCuttingConcerns.observability %}
+                        <li class="rounded-lg border border-slate-800 bg-slate-900/70 p-3">{{ item }}</li>
+                        {% else %}
+                        <li class="text-slate-500">{{ t('artifact.no_item') }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-950/50 p-5">
+            <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.delivery_plan') }}</p>
+            <div class="space-y-4 text-sm text-slate-300">
+                <div>
+                    <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.recommended_order') }}</p>
+                    <ul class="space-y-2">
+                        {% for item in artifact.deliveryPlan.recommendedOrder %}
+                        <li class="rounded-lg border border-slate-800 bg-slate-900/70 p-3">{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div>
+                    <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.milestones') }}</p>
+                    <ul class="space-y-2">
+                        {% for item in artifact.deliveryPlan.milestones %}
+                        <li class="rounded-lg border border-slate-800 bg-slate-900/70 p-3">{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div>
+                    <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('artifact.open_questions') }}</p>
+                    <ul class="space-y-2">
+                        {% for item in artifact.openQuestions %}
+                        <li class="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-amber-100">{{ item }}</li>
+                        {% else %}
+                        <li class="text-slate-500">{{ t('artifact.no_open_questions') }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endif %}

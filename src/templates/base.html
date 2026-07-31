@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="{{ current_language() }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Refinement Assistant{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}?v={{ asset_version }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+    <div class="flex min-h-screen">
+        <aside class="hidden w-72 shrink-0 border-r border-slate-800 bg-slate-900/80 p-6 lg:block">
+            <div class="mb-10">
+                <div class="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/20 text-violet-300">
+                    AI
+                </div>
+                <h1 class="text-2xl font-semibold tracking-tight">{{ t('app.name') }}</h1>
+                <p class="mt-2 text-sm text-slate-400">{{ t('app.tagline') }}</p>
+            </div>
+
+            <nav class="space-y-2 text-sm">
+                <a href="/refinement" class="block rounded-lg px-3 py-2 {% if page == 'refinement' %}bg-violet-500/15 text-violet-200{% else %}text-slate-300 hover:bg-slate-800{% endif %}">
+                    {{ t('nav.refinement') }}
+                </a>
+                <a href="/settings" class="block rounded-lg px-3 py-2 {% if page == 'settings' %}bg-violet-500/15 text-violet-200{% else %}text-slate-300 hover:bg-slate-800{% endif %}">
+                    {{ t('nav.settings') }}
+                </a>
+                <a href="/health" class="block rounded-lg px-3 py-2 text-slate-300 hover:bg-slate-800">{{ t('nav.health') }}</a>
+            </nav>
+        </aside>
+
+        <main class="flex-1">
+            <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur">
+                <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+                    <div>
+                        <p class="text-xs uppercase tracking-[0.2em] text-violet-300">{{ t('header.eyebrow') }}</p>
+                        <h2 class="text-lg font-medium text-slate-100">{{ t('header.title') }}</h2>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/80 p-1" role="group" aria-label="{{ t('lang.switch') }}">
+                            {% for code, language in languages.items() %}
+                            <a href="/lang/{{ code }}?next={{ request.url.path }}"
+                               title="{{ language.label }}"
+                               aria-label="{{ language.label }}"
+                               {% if code == current_language() %}aria-current="true"{% endif %}
+                               class="rounded-full px-2 py-1 text-base leading-none transition {% if code == current_language() %}bg-violet-500/20 ring-1 ring-violet-400/40{% else %}opacity-50 hover:opacity-100{% endif %}">
+                                {{ language.flag }}
+                            </a>
+                            {% endfor %}
+                        </div>
+                        <div class="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300">
+                            MVP
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <div class="mx-auto max-w-7xl px-6 py-8">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+    <script>
+        window.I18N = {{ js_catalog() | tojson }};
+        window.t = function (key, values) {
+            let text = window.I18N[key] || key;
+            Object.entries(values || {}).forEach(([name, value]) => {
+                text = text.replace(`{${name}}`, value);
+            });
+            return text;
+        };
+    </script>
+    <script src="{{ url_for('static', path='js/refinement.js') }}?v={{ asset_version }}"></script>
+    <script src="{{ url_for('static', path='js/settings.js') }}?v={{ asset_version }}"></script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "generate-questions.schema.json",
+  "title": "GenerateQuestionsOutput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "questions",
+    "reasoningSummary",
+    "potentialRisks",
+    "missingAreas",
+    "stopCriteria"
+  ],
+  "properties": {
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "theme", "priority", "question", "why"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^q[0-9]+$"
+          },
+          "theme": {
+            "type": "string",
+            "enum": [
+              "functional",
+              "data",
+              "technical",
+              "dependencies",
+              "testing",
+              "cicd",
+              "infra",
+              "security",
+              "observability"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "question": {
+            "type": "string",
+            "minLength": 8
+          },
+          "why": {
+            "type": "string",
+            "minLength": 8
+          }
+        }
+      }
+    },
+    "reasoningSummary": {
+      "type": "string",
+      "minLength": 10
+    },
+    "potentialRisks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "missingAreas": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "stopCriteria": {
+      "type": "boolean"
+    }
+  }
+}

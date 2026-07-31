@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "session-summary.schema.json",
+  "title": "SessionSummaryOutput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "facts",
+    "assumptions",
+    "unknowns",
+    "dependencies",
+    "risks",
+    "confidence",
+    "enoughContext",
+    "reason"
+  ],
+  "properties": {
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "unknowns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "enoughContext": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 10
+    }
+  }
+}

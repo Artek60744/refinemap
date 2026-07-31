@@ -1,0 +1,22 @@
+{% if question_round and question_round.questions %}
+<form id="answers-form" class="space-y-5" data-session-id="{{ session.session.id }}">
+    <input type="hidden" name="sessionId" value="{{ session.session.id }}">
+    {% for question in question_round.questions %}
+    <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+        <div class="mb-2 flex items-center justify-between gap-3">
+            <span class="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-300">{{ label('theme', question.theme) }}</span>
+            <span class="text-xs uppercase tracking-[0.2em] text-slate-500">{{ label('priority', question.priority) }}</span>
+        </div>
+        <p class="text-sm font-medium text-slate-100">{{ question.question }}</p>
+        <p class="mt-2 text-sm text-slate-400">{{ question.why }}</p>
+        <textarea name="{{ question.id }}" rows="4" class="mt-4 w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-slate-100 placeholder:text-slate-500 focus:border-violet-400 focus:outline-none" placeholder="{{ t('session.answer_placeholder') }}"></textarea>
+    </div>
+    {% endfor %}
+
+    <button type="submit" class="rounded-xl bg-violet-500 px-5 py-3 font-medium text-white hover:bg-violet-400">{{ t('session.submit_answers') }}</button>
+</form>
+{% else %}
+<div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-400">
+    {{ t('session.no_round') }}
+</div>
+{% endif %}

@@ -1,0 +1,71 @@
+<aside class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="mb-5 flex items-center justify-between gap-3">
+        <div>
+            <p class="text-sm text-violet-300">{{ t('summary.eyebrow') }}</p>
+            <h4 class="text-xl font-semibold tracking-tight">{{ t('summary.title') }}</h4>
+        </div>
+        <span class="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs text-slate-300">{{ label('confidence', summary.confidence) }}</span>
+    </div>
+
+    <div class="space-y-4 text-sm">
+        <div>
+            <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('summary.reason') }}</p>
+            <p class="text-slate-300">{{ summary.reason }}</p>
+        </div>
+
+        <div>
+            <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('summary.facts') }}</p>
+            <ul class="space-y-2 text-slate-300">
+                {% for item in summary.facts %}
+                <li class="rounded-lg border border-slate-800 bg-slate-950/60 p-3">{{ item }}</li>
+                {% else %}
+                <li class="text-slate-500">{{ t('summary.no_facts') }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div>
+            <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('summary.assumptions') }}</p>
+            <ul class="space-y-2 text-slate-300">
+                {% for item in summary.assumptions %}
+                <li class="rounded-lg border border-slate-800 bg-slate-950/60 p-3">{{ item }}</li>
+                {% else %}
+                <li class="text-slate-500">{{ t('summary.no_assumptions') }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div>
+            <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('summary.unknowns') }}</p>
+            <ul class="space-y-2 text-slate-300">
+                {% for item in summary.unknowns %}
+                <li class="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-amber-100">{{ item }}</li>
+                {% else %}
+                <li class="text-slate-500">{{ t('summary.no_unknowns') }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div>
+            <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('summary.dependencies') }}</p>
+            <ul class="space-y-2 text-slate-300">
+                {% for item in summary.dependencies %}
+                <li class="rounded-lg border border-slate-800 bg-slate-950/60 p-3">{{ item }}</li>
+                {% else %}
+                <li class="text-slate-500">{{ t('summary.no_dependencies') }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div>
+            <p class="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{{ t('summary.risks') }}</p>
+            <ul class="space-y-2 text-slate-300">
+                {% for item in summary.risks %}
+                <li class="rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-rose-100">{{ item }}</li>
+                {% else %}
+                <li class="text-slate-500">{{ t('summary.no_risks') }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</aside>
