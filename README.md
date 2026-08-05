@@ -1,16 +1,12 @@
 # AI Refinement Assistant
 
-Starter blueprint for an internal AI-assisted backlog refinement tool.
+Internal AI-assisted backlog refinement tool: a React SPA talking to a
+FastAPI + LangGraph JSON API.
 
-This repository is intentionally aligned with the architecture patterns already
-used in `../app`:
-
-- `FastAPI` for HTML pages and JSON endpoints
-- `Jinja2` for server-rendered views
-- `HTMX` for progressive interactivity without a SPA
-- `LangGraph` for stateful question loops and human-in-the-loop flow
-- `Pydantic` for request validation and structured LLM outputs
-- `SQLAlchemy` and `Alembic` for persistence
+- `frontend/` — React 18 + TypeScript + Vite + Tailwind, served by nginx in
+  production
+- `src/` — FastAPI backend: JSON API, LangGraph refinement workflow,
+  SQLAlchemy persistence, Azure DevOps + LLM provider abstractions
 
 ## Goal
 
@@ -22,99 +18,104 @@ Help a team refine Azure DevOps work items by:
 - receiving a structured refinement proposal with story split, acceptance criteria,
   CI/CD impacts, test notes, infra considerations, and risks
 
-## Recommended MVP stack
+## Architecture
 
-- Backend and pages: `FastAPI`
-- Templates: `Jinja2`
-- Interactivity: `HTMX`
-- Orchestration: `LangGraph`
-- Validation and settings: `Pydantic v2`, `pydantic-settings`
-- Database: `PostgreSQL`
-- ORM: `SQLAlchemy 2.x`
-- Migrations: `Alembic`
-- Azure DevOps integration: `httpx` or `azure-devops` SDK behind an adapter
-- LLM provider: `Azure AI Foundry` or `Azure OpenAI`
-- Tracing: `Langfuse`
-- Logging and monitoring: `python-json-logger`, `OpenTelemetry`, `Prometheus`
-
-## Core design decisions
-
-- The UI never calls Azure DevOps or the LLM directly.
+- The React SPA never calls Azure DevOps or the LLM directly; it only talks to
+  the JSON API (`/api/refinement/*`, `/api/settings/*`).
 - The FastAPI backend owns orchestration, persistence, and credential handling.
-- The refinement loop is implemented as a `LangGraph` state machine, not a free-form chat.
+- The refinement loop is implemented as a `LangGraph` state machine, not a
+  free-form chat.
 - Each LLM stage returns structured JSON validated by `Pydantic` and JSON Schema.
-- `thread_id=session_id` is used to align LangGraph checkpoints with application sessions.
-- LangGraph checkpoints help with resume flow, but PostgreSQL remains the source of truth.
+- `thread_id=session_id` aligns LangGraph checkpoints with application sessions;
+  PostgreSQL remains the source of truth.
+- In production, an nginx container serves the built SPA and reverse-proxies
+  `/api` and `/health` to the backend — same origin, so no CORS is needed.
+- i18n: the UI catalog (fr/en) lives in `frontend/src/i18n/catalog.ts`; the
+  backend keeps its own catalog (`src/i18n.py`) for API messages, provider
+  errors, mock LLM content, and the LLM prompt language. Both read the same
+  `lang` cookie.
 
-## Target repository layout
+## Stack
+
+- Frontend: `React 18`, `TypeScript`, `Vite`, `react-router`, `Tailwind CSS v4`
+- Backend: `FastAPI`, `LangGraph`, `Pydantic v2`, `SQLAlchemy 2.x`
+- Database: `PostgreSQL` (SQLite fallback for local runs)
+- Azure DevOps integration: `httpx` behind an adapter (mock mode available)
+- LLM provider: pluggable (mock by default; Azure AI Foundry / Azure OpenAI /
+  OpenAI / OpenRouter configurable from the settings page)
+
+## Repository layout
 
 ```text
 .
-|-- README.md
-|-- .env.example
-|-- contracts/
-|   |-- refinement-api.md
-|   |-- generate-questions.schema.json
-|   |-- session-summary.schema.json
-|   `-- final-refinement.schema.json
-|-- docs/
-|   |-- implementation-plan.md
-|   |-- mvp-blueprint.md
-|   `-- sqlalchemy-data-model.md
-`-- prompts/
-    |-- system-refinement.md
-    |-- generate-questions.md
-    |-- summarize-context.md
-    `-- generate-final-refinement.md
+|-- frontend/
+|   |-- Dockerfile            # node build stage -> nginx runtime
+|   |-- nginx.conf            # SPA + reverse proxy /api, /health
+|   `-- src/
+|       |-- api/              # typed fetch client, one function per endpoint
+|       |-- components/       # Layout, WorkItemCard, QuestionRoundPanel, ...
+|       |-- i18n/             # fr/en catalog + LanguageProvider
+|       |-- pages/            # RefinementHome, SessionPage, Result, Settings
+|       `-- types/api.ts      # mirrors the Pydantic schemas
+|-- src/
+|   |-- main.py               # FastAPI app (API only)
+|   |-- api/                  # routers + Pydantic schemas
+|   |-- agents/refinement_workflow/   # LangGraph graph, nodes, state
+|   |-- services/             # refinement, settings, Azure DevOps, LLM, export
+|   |-- repositories/         # persistence
+|   |-- models/               # SQLAlchemy models
+|   `-- i18n.py               # backend catalog (api.*, ado.*, mock.*)
+|-- contracts/                # JSON schemas + API contract
+|-- prompts/                  # versioned LLM prompts
+`-- docs/
 ```
 
-When implementation starts, the recommended application layout is:
+## Run locally (dev)
 
-```text
-src/
-  main.py
-  api/
-    refinement.py
-    schemas_refinement.py
-  routes/
-    refinement.py
-  agents/
-    refinement_workflow/
-      __init__.py
-      graph.py
-      state.py
-      nodes/
-  config/
-    settings.py
-  models/
-    refinement.py
-  repositories/
-  services/
-    azure_devops_refinement.py
-    prompt_loader.py
-    artifact_renderer.py
-  templates/
-    base.html
-    refinement/
-  static/
-  database.py
+Backend (terminal 1):
+
+```bash
+pip install -r requirements.txt
+# without a local PostgreSQL:
+# DATABASE_URL=sqlite:///./refinement.db
+uvicorn src.main:app --reload --port 8000
 ```
 
-## Main artifacts in this repository
+Frontend (terminal 2):
 
-- `docs/mvp-blueprint.md`: macro architecture, page flow, LangGraph loop, checkpoints
-- `docs/implementation-plan.md`: phased build plan aligned with the Python stack
-- `docs/sqlalchemy-data-model.md`: target relational model for sessions and artifacts
-- `contracts/refinement-api.md`: page and API contract
-- `prompts/`: versioned prompts for question generation, summarization, and final refinement
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## Suggested next build step
+Open <http://localhost:5173>. The Vite dev server proxies `/api` and `/health`
+to the backend, so everything stays same-origin.
 
-1. scaffold the FastAPI app structure under `src/`
-2. add `settings.py`, `database.py`, and Alembic
-3. implement the Azure DevOps work item adapter
-4. implement the refinement page and the JSON session endpoints
-5. build the first LangGraph loop with checkpointing and structured outputs
+The default mode (`LLM_PROVIDER=mock`, `AZURE_DEVOPS_MOCK_MODE=true`) runs the
+full flow locally without external dependencies.
+
+## Run with Docker
+
+```bash
+docker compose up --build
+```
+
+Open <http://localhost/> — nginx serves the SPA and proxies the API.
+
+## Deploy and update
+
+The application is deployed on an Azure VM and updated with `./deploy.sh`:
+
+```bash
+./deploy.sh dev      # once: enable Python hot reload on the VM
+./deploy.sh sync     # after each change (rebuilds the web image if needed)
+./deploy.sh logs     # see what happened
+```
+
+Live at <http://203.0.113.10/>.
+See `docs/deployment.md` for the full guide, including cost control and
+the current security limitations.
 
 ## MVP success criteria
 
@@ -124,86 +125,10 @@ src/
 - the final output is structured and exportable as markdown
 - facts, assumptions, unknowns, and recommendations are clearly separated
 
-## Current MVP status
-
-The repository now contains a working MVP skeleton under `src/` with:
-
-- FastAPI application entry point
-- server-rendered Jinja2 pages
-- lightweight frontend behavior in plain JavaScript
-- SQLAlchemy persistence with a local SQLite default
-- Azure DevOps provider abstraction with a mock implementation
-- LangGraph-compatible refinement workflow
-- mock LLM refinement engine for end-to-end local testing
-- a persisted settings area for the LLM provider and the Azure DevOps connection
-- a French/English UI, switched from the flags in the header (`src/i18n.py` holds the catalog)
-
-The current default mode is:
-
-- `LLM_PROVIDER=mock`
-- `AZURE_DEVOPS_MOCK_MODE=true`
-
-This lets the full flow run locally without external dependencies.
-
-## Run locally
-
-1. Create and activate a virtual environment.
-2. Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-3. Optionally copy `.env.example` to `.env` and adjust values.
-   If you do not have a working PostgreSQL locally, set for example:
-
-```bash
-DATABASE_URL=sqlite:///./refinement.db
-```
-
-4. Start the app:
-
-```bash
-uvicorn src.main:app --reload --port 8000
-```
-
-5. Open:
-
-```text
-http://localhost:8000/refinement
-```
-
-## Deploy and update
-
-The application is deployed on an Azure VM and updated with `./deploy.sh`:
-
-```bash
-./deploy.sh dev      # once: enable hot reload on the VM
-./deploy.sh sync     # after each change
-./deploy.sh logs     # see what happened
-```
-
-Live at <http://203.0.113.10/refinement>.
-See `docs/deployment.md` for the full guide, including cost control and
-the current security limitations.
-
-## What is already verified
-
-- Python modules compile successfully
-- FastAPI app imports successfully
-- work item search works in mock mode
-- session creation works
-- answer submission loops correctly
-- a final refinement artifact is generated
-- markdown export works
-- settings page loads
-- settings can be saved in the database
-- LLM and Azure DevOps connection tests work in their current MVP modes
-
 ## Next technical increments
 
 1. replace the mock LLM with a real provider client
 2. add a real Azure DevOps auth and work item fetch path
 3. replace `create_all()` bootstrap with Alembic migrations
-4. move plain JS partial refreshes to deeper HTMX usage if desired
-5. add authentication and session ownership checks
+4. add authentication and session ownership checks
+5. add a session history endpoint + page

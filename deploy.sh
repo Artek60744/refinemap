@@ -44,6 +44,8 @@ EXCLUDES=(
   --exclude='.pytest_cache'
   --exclude='.mypy_cache'
   --exclude='.ruff_cache'
+  --exclude='frontend/node_modules'
+  --exclude='frontend/dist'
 )
 
 # Azure's Run Command caps the inline script it accepts. Our payload is the
@@ -187,8 +189,11 @@ cmd_sync() {
   push_code
   remote_run <<EOF
 $(compose_cmd)
+# Rebuild the SPA image; docker layer cache makes this a no-op when frontend/
+# did not change.
+\$COMPOSE up -d --build web
 if [ -f $MARKER ]; then
-  echo "dev mode: uvicorn --reload picks the changes up on its own"
+  echo "dev mode: uvicorn --reload picks the Python changes up on its own"
 else
   echo "prod mode: restarting the app container"
   \$COMPOSE restart app
@@ -232,7 +237,7 @@ cmd_logs() {
     case "$arg" in
       -f|--follow) follow="-f" ;;
       all)         service="" ;;
-      app|db)      service="$arg" ;;
+      app|db|web)  service="$arg" ;;
       ''|*[!0-9]*) ;;
       *)           tail="$arg" ;;
     esac
@@ -304,14 +309,15 @@ cmd_env() {
 
 cmd_health() {
   remote_run <<'EOF'
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:8000/refinement || echo 000)
+# Goes through nginx, so one check exercises the SPA proxy and the API at once.
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost/health || echo 000)
 if [ "$code" = "200" ]; then
   echo "health: HTTP $code — the app is serving"
 else
   echo "health: HTTP $code — check './deploy.sh logs'"
 fi
 EOF
-  echo "${DIM}    http://$VM_IP/refinement${NC}"
+  echo "${DIM}    http://$VM_IP/${NC}"
 }
 
 cmd_ssh() {
@@ -341,7 +347,9 @@ Usage: ./deploy.sh <command> [args]
 
 Daily loop
   sync              Upload the code and apply it (fast; instant in dev mode)
+                    Frontend changes rebuild the web image on the VM.
   dev               Switch the VM to dev mode: bind-mounted source, hot reload
+                    (Python only — iterate on the frontend locally with Vite)
   logs [-f|N]       Show logs; -f follows (needs SSH), N sets the tail length
   status            Containers, current mode, disk and memory
 

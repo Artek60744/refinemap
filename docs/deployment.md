@@ -3,12 +3,15 @@
 L'application tourne sur une VM Azure, en conteneurs Docker. Toutes les
 opérations passent par `./deploy.sh` à la racine du dépôt.
 
-**URL** : <http://203.0.113.10/refinement>
+**URL** : <http://203.0.113.10/>
 
-> Utilisez le port 80 (donc l'URL sans `:8000`). Le port 8000 reste ouvert mais
-> beaucoup de réseaux d'entreprise et certains FAI bloquent les ports non
-> standards en sortie — c'est la cause des timeouts observés au premier
-> déploiement.
+Trois conteneurs :
+
+- `web` — nginx, sert le front React (`frontend/`) et reverse-proxy `/api`
+  et `/health` vers l'API. C'est lui qui écoute sur le port 80.
+- `app` — FastAPI + LangGraph, interne au réseau Docker (plus aucun port
+  publié).
+- `db` — PostgreSQL 16.
 
 ---
 
@@ -20,9 +23,14 @@ opérations passent par `./deploy.sh` à la racine du dépôt.
 ./deploy.sh sync     # à chaque fois que vous voulez voir le résultat
 ```
 
-En mode dev, le code source est monté dans le conteneur et `uvicorn --reload`
-détecte les changements. `sync` ne fait que copier les fichiers : pas de
-reconstruction d'image, pas de redémarrage de conteneur.
+En mode dev, le code source Python est monté dans le conteneur et
+`uvicorn --reload` détecte les changements. `sync` ne fait que copier les
+fichiers : pas de reconstruction d'image, pas de redémarrage de conteneur.
+
+Le rechargement à chaud ne concerne que le backend. Pour itérer sur le front
+React, travaillez en local avec Vite (`cd frontend && npm run dev`) ; un
+`sync` reconstruit l'image `web` sur la VM quand `frontend/` a changé (no-op
+sinon, grâce au cache Docker).
 
 ## Les deux modes
 
@@ -55,7 +63,8 @@ quand vous laissez tourner l'outil pour d'autres personnes.
 ./deploy.sh logs            # 80 dernières lignes de l'app
 ./deploy.sh logs 200        # 200 lignes
 ./deploy.sh logs db         # logs PostgreSQL
-./deploy.sh logs all        # les deux services
+./deploy.sh logs web        # logs nginx (front)
+./deploy.sh logs all        # tous les services
 ./deploy.sh logs -f         # suit en direct (nécessite SSH)
 ./deploy.sh status          # conteneurs, mode courant, disque, mémoire
 ```
@@ -174,9 +183,9 @@ d'entreprise, sur lequel ce compte n'a pas les droits.
 | Groupe de ressources | `rg-example` |
 | Région | France Central |
 | VM | `vm-example`, Standard_B2s (2 vCPU, 4 Go), Ubuntu 22.04 |
-| Ports ouverts | 22 (SSH), 80 (app), 8000 (app) |
+| Ports ouverts | 22 (SSH), 80 (nginx) |
 | Répertoire applicatif | `/opt/refinement` |
-| Conteneurs | `refinement-app-1` (FastAPI), `refinement-db-1` (PostgreSQL 16) |
+| Conteneurs | `refinement-web-1` (nginx + front React), `refinement-app-1` (FastAPI), `refinement-db-1` (PostgreSQL 16) |
 
 Accès SSH direct :
 
@@ -188,12 +197,11 @@ ssh -i ~/.ssh/deploy_key azureuser@203.0.113.10
 
 ## Dépannage
 
-**La page ne se charge pas / timeout.** Vérifiez d'abord que vous utilisez le
-port 80 (`http://203.0.113.10/refinement`, sans `:8000`). Puis
-`./deploy.sh status` pour confirmer que les conteneurs tournent, et
-`./deploy.sh health` qui teste depuis l'intérieur de la VM — si celui-ci
-répond 200 alors que votre navigateur échoue, le blocage est sur votre réseau,
-pas sur le serveur.
+**La page ne se charge pas / timeout.** `./deploy.sh status` pour confirmer
+que les conteneurs tournent, et `./deploy.sh health` qui teste depuis
+l'intérieur de la VM (via nginx, donc toute la chaîne) — si celui-ci répond
+200 alors que votre navigateur échoue, le blocage est sur votre réseau, pas
+sur le serveur.
 
 **`sync` ne change rien à ce qui s'affiche.** Confirmez le mode avec
 `./deploy.sh status`. En mode prod, `sync` redémarre le conteneur mais le code
