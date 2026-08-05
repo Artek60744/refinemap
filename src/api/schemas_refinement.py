@@ -121,11 +121,20 @@ class DecisionModel(StrictModel):
     reason: str
 
 
+class WorkItemCharacteristics(StrictModel):
+    businessPriority: int = 3
+    technicalComplexity: int = 3
+    risk: int = 3
+    effort: int = 5
+    businessValue: int = 3
+
+
 class CreateSessionRequest(StrictModel):
     workItemId: str
     extraContext: str = ""
     maxRounds: int | None = None
     maxQuestionsPerRound: int | None = None
+    characteristics: WorkItemCharacteristics | None = None
 
 
 class AnswerInput(StrictModel):

@@ -10,8 +10,6 @@ import {
 import { useI18n } from "../i18n";
 import type { ConnectionTestResponse, SettingsViewResponse } from "../types/api";
 
-// Endpoint + deployment only exist for the Azure-hosted providers; the plain
-// API providers are addressed by model name instead.
 const LLM_FIELDS_BY_PROVIDER: Record<string, string[]> = {
   mock: [],
   "azure-foundry": ["endpoint", "deployment"],
@@ -21,7 +19,8 @@ const LLM_FIELDS_BY_PROVIDER: Record<string, string[]> = {
 };
 
 const INPUT_CLASS =
-  "w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 focus:outline-none";
+  "w-full rounded-lg border border-border-subtle bg-white px-4 py-3 text-sm text-on-surface placeholder:text-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors";
+const LABEL_CLASS = "mb-2 block text-xs font-semibold text-on-surface-variant uppercase tracking-wider";
 
 interface FormState {
   llmProvider: string;
@@ -59,9 +58,9 @@ function ConnectionResult({ result }: { result: ConnectionTestResponse | null })
   const entries = Object.entries(result.details ?? {});
   return (
     <div className="mt-4 text-sm">
-      <div className={result.success ? "text-emerald-300" : "text-rose-300"}>{result.message}</div>
+      <div className={result.success ? "text-green-600" : "text-error"}>{result.message}</div>
       {entries.length > 0 && (
-        <div className="mt-2 text-xs text-slate-400">
+        <div className="mt-2 text-xs text-outline">
           {entries.map(([key, value]) => `${key}: ${value}`).join(" • ")}
         </div>
       )}
@@ -236,35 +235,34 @@ export default function SettingsPage() {
   const visibleLlmFields = LLM_FIELDS_BY_PROVIDER[form.llmProvider] ?? ["model"];
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-3xl py-8">
       <div className="mb-8">
-        <p className="text-sm text-violet-300">{t("settings.eyebrow")}</p>
-        <h3 className="text-3xl font-semibold tracking-tight">{t("settings.title")}</h3>
-        <p className="mt-2 text-sm text-slate-400">{t("settings.subtitle")}</p>
+        <h2 className="font-headline-lg text-headline-lg text-on-surface">{t("settings.title")}</h2>
+        <p className="mt-2 font-body-md text-body-md text-on-surface-variant">{t("settings.subtitle")}</p>
       </div>
 
       {banner && (
         <div
-          className={`mb-6 rounded-xl border px-4 py-3 text-sm ${
+          className={`mb-6 rounded-lg border px-4 py-3 text-sm ${
             banner.kind === "success"
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-              : "border-rose-500/30 bg-rose-500/10 text-rose-200"
+              ? "border-green-300 bg-green-50 text-green-700"
+              : "border-error/30 bg-error-container/50 text-error"
           }`}
         >
           {banner.message}
         </div>
       )}
 
-      <div className="mb-6 flex flex-wrap gap-2 border-b border-slate-800">
+      <div className="mb-6 flex gap-1 border-b border-border-subtle">
         {(["llm", "azure"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
             onClick={() => setActiveTab(tab)}
-            className={`rounded-t-xl border border-b-0 px-4 py-2 text-sm font-medium ${
+            className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors cursor-pointer bg-transparent ${
               activeTab === tab
-                ? "border-slate-700 bg-slate-900 text-slate-100"
-                : "border-transparent text-slate-400 hover:text-slate-200"
+                ? "border-primary text-primary"
+                : "border-transparent text-on-surface-variant hover:text-on-surface"
             }`}
           >
             {t(`settings.tab.${tab}`)}
@@ -274,31 +272,28 @@ export default function SettingsPage() {
 
       <form onSubmit={handleSave} className="space-y-6">
         <section className={activeTab === "llm" ? "space-y-6" : "hidden"}>
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+          <div className="rounded-xl border border-border-subtle bg-surface-container-lowest p-6 shadow-sm">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-violet-300">LLM</p>
-                <h4 className="text-xl font-semibold tracking-tight">{t("llm.title")}</h4>
-                <p className="mt-2 text-sm text-slate-400">{t("llm.subtitle")}</p>
+                <h3 className="font-headline-md text-headline-md text-on-surface">{t("llm.title")}</h3>
+                <p className="mt-1 font-body-md text-body-md text-on-surface-variant">{t("llm.subtitle")}</p>
               </div>
               <button
                 type="button"
                 onClick={() => void handleTestLlm()}
-                className="rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-2 text-sm text-violet-200 hover:bg-violet-500/20"
+                className="rounded-lg border border-primary/30 bg-primary-fixed/30 px-4 py-2 text-sm font-semibold text-on-primary-fixed-variant hover:bg-primary-fixed/50 transition-colors cursor-pointer shrink-0"
               >
                 {t("common.test")}
               </button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-4">
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-200">
-                  {t("llm.provider")}
-                </label>
+                <label className={LABEL_CLASS}>{t("llm.provider")}</label>
                 <select
                   value={form.llmProvider}
                   onChange={(event) => set("llmProvider", event.target.value)}
-                  className={`${INPUT_CLASS} focus:border-violet-400`}
+                  className={INPUT_CLASS}
                 >
                   <option value="mock">Mock</option>
                   <option value="azure-foundry">Azure Foundry</option>
@@ -307,65 +302,60 @@ export default function SettingsPage() {
                   <option value="openrouter">OpenRouter</option>
                 </select>
               </div>
+
               {visibleLlmFields.includes("model") && (
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-200">
-                    {t("llm.model")}
-                  </label>
+                  <label className={LABEL_CLASS}>{t("llm.model")}</label>
                   <input
                     type="text"
                     value={form.llmModel}
                     onChange={(event) => set("llmModel", event.target.value)}
                     placeholder="gpt-4.1-mini"
-                    className={`${INPUT_CLASS} focus:border-violet-400`}
+                    className={INPUT_CLASS}
                   />
-                  <p className="mt-2 text-xs text-slate-500">{t("llm.model_hint")}</p>
+                  <p className="mt-2 text-xs text-outline">{t("llm.model_hint")}</p>
                 </div>
               )}
+
               {visibleLlmFields.includes("endpoint") && (
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-200">
-                    {t("llm.endpoint")}
-                  </label>
+                  <label className={LABEL_CLASS}>{t("llm.endpoint")}</label>
                   <input
                     type="text"
                     value={form.llmEndpoint}
                     onChange={(event) => set("llmEndpoint", event.target.value)}
                     placeholder="https://mon-service.openai.azure.com"
-                    className={`${INPUT_CLASS} focus:border-violet-400`}
+                    className={INPUT_CLASS}
                   />
-                  <p className="mt-2 text-xs text-slate-500">{t("llm.endpoint_hint")}</p>
+                  <p className="mt-2 text-xs text-outline">{t("llm.endpoint_hint")}</p>
                 </div>
               )}
+
               {visibleLlmFields.includes("deployment") && (
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-200">
-                    {t("llm.deployment")}
-                  </label>
+                  <label className={LABEL_CLASS}>{t("llm.deployment")}</label>
                   <input
                     type="text"
                     value={form.llmDeployment}
                     onChange={(event) => set("llmDeployment", event.target.value)}
                     placeholder="mon-gpt4o-prod"
-                    className={`${INPUT_CLASS} focus:border-violet-400`}
+                    className={INPUT_CLASS}
                   />
-                  <p className="mt-2 text-xs text-slate-500">{t("llm.deployment_hint")}</p>
+                  <p className="mt-2 text-xs text-outline">{t("llm.deployment_hint")}</p>
                 </div>
               )}
             </div>
 
             <div className="mt-4">
-              <label className="mb-2 block text-sm font-medium text-slate-200">
-                {t("llm.api_key")}
-              </label>
+              <label className={LABEL_CLASS}>{t("llm.api_key")}</label>
               <input
                 type="password"
                 value={form.llmApiKey}
                 onChange={(event) => set("llmApiKey", event.target.value)}
                 placeholder={t("llm.api_key_placeholder")}
-                className={`${INPUT_CLASS} focus:border-violet-400`}
+                className={INPUT_CLASS}
               />
-              <p className="mt-2 text-xs text-slate-500">{keyHintText}</p>
+              <p className="mt-2 text-xs text-outline">{keyHintText}</p>
             </div>
 
             <ConnectionResult result={llmTestResult} />
@@ -373,17 +363,16 @@ export default function SettingsPage() {
         </section>
 
         <section className={activeTab === "azure" ? "space-y-6" : "hidden"}>
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+          <div className="rounded-xl border border-border-subtle bg-surface-container-lowest p-6 shadow-sm">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-violet-300">Azure DevOps</p>
-                <h4 className="text-xl font-semibold tracking-tight">{t("azure.title")}</h4>
-                <p className="mt-2 text-sm text-slate-400">{t("azure.subtitle")}</p>
+                <h3 className="font-headline-md text-headline-md text-on-surface">{t("azure.title")}</h3>
+                <p className="mt-1 font-body-md text-body-md text-on-surface-variant">{t("azure.subtitle")}</p>
               </div>
               <button
                 type="button"
                 onClick={() => void handleTestAdo()}
-                className="rounded-xl border border-blue-400/30 bg-blue-500/10 px-4 py-2 text-sm text-blue-200 hover:bg-blue-500/20"
+                className="rounded-lg border border-tertiary-container/30 bg-tertiary-fixed/30 px-4 py-2 text-sm font-semibold text-tertiary hover:bg-tertiary-fixed/50 transition-colors cursor-pointer shrink-0"
               >
                 {t("common.test")}
               </button>
@@ -391,26 +380,23 @@ export default function SettingsPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-200">
-                  {t("azure.org_url")}
-                </label>
+                <label className={LABEL_CLASS}>{t("azure.org_url")}</label>
                 <input
                   type="text"
                   value={form.adoOrgUrl}
                   onChange={(event) => set("adoOrgUrl", event.target.value)}
                   placeholder="https://dev.azure.com/myorg"
-                  className={`${INPUT_CLASS} focus:border-blue-400`}
+                  className={INPUT_CLASS}
                 />
               </div>
+
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-200">
-                  {t("azure.project")}
-                </label>
+                <label className={LABEL_CLASS}>{t("azure.project")}</label>
                 <div className="flex gap-3">
                   <select
                     value={form.adoProject}
                     onChange={(event) => set("adoProject", event.target.value)}
-                    className={`${INPUT_CLASS} focus:border-blue-400`}
+                    className={`${INPUT_CLASS} flex-1`}
                   >
                     {projectOptions.length === 0 && (
                       <option value="">{t("azure.project_placeholder")}</option>
@@ -425,32 +411,32 @@ export default function SettingsPage() {
                     type="button"
                     disabled={loadingProjects}
                     onClick={() => void loadProjects(form.adoOrgUrl, form.adoPat)}
-                    className="whitespace-nowrap rounded-xl border border-blue-400/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-200 hover:bg-blue-500/20 disabled:opacity-60"
+                    className="whitespace-nowrap rounded-lg border border-tertiary-container/30 bg-tertiary-fixed/30 px-4 py-3 text-sm font-semibold text-tertiary hover:bg-tertiary-fixed/50 disabled:opacity-50 transition-colors cursor-pointer"
                   >
                     {t("common.load")}
                   </button>
                 </div>
-                <p className="mt-2 text-xs text-slate-500">{projectHint}</p>
+                <p className="mt-2 text-xs text-outline">{projectHint}</p>
               </div>
+
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-200">
-                  {t("azure.pat")}
-                </label>
+                <label className={LABEL_CLASS}>{t("azure.pat")}</label>
                 <input
                   type="password"
                   value={form.adoPat}
                   onChange={(event) => set("adoPat", event.target.value)}
                   placeholder={t("azure.pat_placeholder")}
-                  className={`${INPUT_CLASS} focus:border-blue-400`}
+                  className={INPUT_CLASS}
                 />
-                <p className="mt-2 text-xs text-slate-500">{patHintText}</p>
+                <p className="mt-2 text-xs text-outline">{patHintText}</p>
               </div>
-              <label className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-200">
+
+              <label className="flex items-center gap-3 rounded-lg border border-border-subtle bg-surface-container-low px-4 py-3 text-sm font-medium text-on-surface cursor-pointer">
                 <input
                   type="checkbox"
                   checked={form.adoMockMode}
                   onChange={(event) => set("adoMockMode", event.target.checked)}
-                  className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-blue-400 focus:ring-blue-400"
+                  className="h-4 w-4 rounded border-border-subtle bg-white text-primary focus:ring-primary"
                 />
                 {t("azure.mock_mode")}
               </label>
@@ -460,13 +446,14 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <div className="flex items-center justify-between gap-4 border-t border-slate-800 pt-6">
-          <p className="text-sm text-slate-400">{t("settings.secrets_note")}</p>
+        <div className="flex items-center justify-between gap-4 border-t border-border-subtle pt-6">
+          <p className="text-xs text-outline">{t("settings.secrets_note")}</p>
           <button
             type="submit"
             disabled={saving}
-            className="rounded-xl bg-emerald-500 px-5 py-3 font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary-container text-on-primary px-5 py-3 text-sm font-semibold hover:opacity-90 disabled:opacity-50 active:scale-95 transition-all cursor-pointer border-0"
           >
+            <span className="material-symbols-outlined text-[18px]">save</span>
             {saving ? t("common.loading") : t("common.save")}
           </button>
         </div>

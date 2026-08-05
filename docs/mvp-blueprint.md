@@ -1,277 +1,190 @@
-# MVP Blueprint
+# Blueprint MVP
 
-## 1. Product scope
+## 1. Scope produit
 
-The MVP covers a guided refinement workflow for existing Azure DevOps work items.
+Le MVP couvre **un seul workflow, de bout en bout** : transformer un brainstorm
+d'équipe en décision priorisée puis en artefact exploitable, dans une seule session.
 
-In scope:
+Principe directeur pour tenir le scope : **un seul persona, un seul workflow, une seule
+promesse.**
 
-- search and select an Azure DevOps work item
-- ingest title, description, tags, acceptance criteria, links, and metadata
-- accept an extra free-text context from the user
-- generate iterative clarification questions
-- capture team answers
-- generate a structured final refinement artifact
-- export the final artifact as markdown
+In scope :
 
-Out of scope for MVP:
+- workspace simple (l'espace d'une équipe)
+- board de refinement collaboratif (idées organisées en arborescence)
+- moteur IA de structuration + critique (axes, questions, reformulations)
+- scoring impact / effort / risque / confiance
+- export vers brief produit ou backlog (Markdown / CSV / JSON) et note de cadrage
 
-- automatic work item creation back into Azure DevOps
-- repository scanning
-- pipeline scanning
-- semantic search across repositories
-- multi-agent orchestration
-- automatic prompt routing by provider cost
+Out of scope pour le MVP :
 
-## 2. Why this stack fits the existing project ecosystem
+- permissions avancées
+- temps réel complexe type Figma / Miro natif
+- intégrations profondes Jira / Linear / Azure DevOps
+- analytics avancés
+- billing sophistiqué
 
-After inspecting `../app`, the following patterns are already established and should
-be reused instead of introducing a second full-stack model:
+## 2. Persona & workflow unique
 
-- `FastAPI` app entry point and lifespan management
-- separation between `src/routes/` for HTML and `src/api/` for JSON
-- `Jinja2Templates` with shared base templates
-- `HTMX` for lightweight progressive interactions
-- `LangGraph` graphs with `thread_id` and checkpointing
-- `Pydantic Settings` for configuration
-- `SQLAlchemy` session management and `Alembic` migrations
+Persona principal : PM, Product Owner ou Tech Lead dans une équipe produit-tech de 3 à
+10 personnes. Wedge initial : le founder solo qui raffine une idée SaaS.
 
-The refinement tool is a stateful, iterative human-in-the-loop workflow. That is a
-better fit for `LangGraph` than for a plain request-response prompt wrapper.
+Workflow cible : **capturer une idée → la challenger collectivement → la scorer →
+l'exporter en note de cadrage ou backlog initial.**
 
-## 3. Architecture principles
+KPI d'activation : une équipe crée un board, raffine une idée et obtient un export
+final **dans la même session**.
 
-- Keep the HTML UI server-rendered for the MVP.
-- Use `HTMX` for incremental updates instead of a SPA.
-- Treat LangGraph as the orchestration engine, not as the main persistence layer.
-- Keep PostgreSQL as the source of truth for sessions, answers, summaries, and outputs.
-- Use `thread_id=session_id` so graph checkpoints and database state stay aligned.
-- Validate every LLM output before it touches session state.
-- Distinguish facts, assumptions, unknowns, dependencies, and risks.
+## 3. Principes d'architecture
 
-## 4. System context
+- La SPA React est le front ; le backend FastAPI possède l'orchestration.
+- LangGraph est le **moteur d'orchestration** du refinement, pas la couche de
+  persistance principale.
+- PostgreSQL reste la **source de vérité** pour les boards, nœuds, itérations, scores,
+  votes et exports.
+- `thread_id` aligne les checkpoints du graphe avec l'entité raffinée (board / nœud).
+- Toute sortie LLM est **validée avant** de toucher l'état applicatif.
+- On distingue explicitement **faits, hypothèses, inconnues, dépendances et risques**.
+- L'IA pose les bonnes questions et aide à converger ; elle n'écrit pas tout à la place
+  de l'équipe.
+
+## 4. Contexte système
 
 ```mermaid
 flowchart LR
-    U[User] --> FE[FastAPI HTML UI\nJinja2 + HTMX]
-    FE --> API[FastAPI API Layer]
-    API --> AZDO[Azure DevOps]
-    API --> LG[LangGraph Workflow]
-    LG --> LLM[LLM Provider]
+    U[Utilisateur] --> FE[SPA React\nVite + Tailwind]
+    FE --> API[API FastAPI]
+    API --> LG[Workflow LangGraph]
+    LG --> LLM[Fournisseur LLM]
     API --> DB[(PostgreSQL)]
     API --> OBS[Logs / Metrics / Traces]
 ```
 
-## 5. Container view
+## 5. Vue conteneurs
 
 ```mermaid
 flowchart TB
     subgraph UI
-        A1[Refinement page]
-        A2[Session workspace]
-        A3[Result page]
-        A4[HTMX partial refreshes]
+        A1[Accueil / workspaces]
+        A2[Board de refinement]
+        A3[Vue scoring & décision]
+        A4[Export final]
     end
 
-    subgraph FastAPI app
-        B1[HTML routes]
-        B2[JSON API]
-        B3[Azure DevOps adapter]
-        B4[Refinement service]
-        B5[Artifact renderer]
+    subgraph FastAPI
+        B1[API JSON]
+        B2[Service de refinement]
+        B3[Moteur de scoring]
+        B4[Générateur d'exports]
     end
 
     subgraph LangGraph
-        C1[Refinement graph]
+        C1[Graphe de refinement]
         C2[Checkpoint store]
     end
 
-    subgraph Persistence
+    subgraph Persistance
         D1[(PostgreSQL)]
     end
 
-    subgraph External systems
-        E1[Azure DevOps REST API]
-        E2[Azure AI / OpenAI]
+    subgraph Externe
+        E1[Azure AI / OpenAI / OpenRouter]
     end
 
     A1 --> B1
     A2 --> B1
-    A4 --> B2
-    B2 --> B4
-    B4 --> B3
-    B4 --> C1
+    A3 --> B1
+    A4 --> B4
+    B1 --> B2
+    B2 --> C1
+    B2 --> B3
     C1 --> C2
-    B4 --> D1
-    B3 --> E1
-    C1 --> E2
+    B2 --> D1
+    B3 --> D1
+    C1 --> E1
 ```
 
-## 6. Target application layout
+## 6. Rôles IA
 
-The implementation should follow the same broad shape as `../app`.
+Deux rôles complémentaires structurent le moteur de refinement :
 
-```text
-src/
-  main.py
-  api/
-    refinement.py
-    schemas_refinement.py
-  routes/
-    refinement.py
-  agents/
-    refinement_workflow/
-      __init__.py
-      graph.py
-      state.py
-      nodes/
-        load_work_item.py
-        compile_context.py
-        generate_questions.py
-        summarize_context.py
-        generate_final_refinement.py
-        error_handler.py
-  config/
-    settings.py
-  database.py
-  models/
-    refinement.py
-  repositories/
-    refinement_sessions_repository.py
-    work_item_snapshots_repository.py
-  services/
-    azure_devops_refinement.py
-    refinement_service.py
-    artifact_renderer.py
-    prompt_loader.py
-  templates/
-    base.html
-    refinement/
-      index.html
-      session.html
-      result.html
-      partials/
-        work_item_card.html
-        question_round.html
-        session_summary.html
-        final_artifact.html
-  static/
-```
+- **Agent critique** : pose des questions de clarification, repère les zones vagues,
+  les hypothèses non testées et les contradictions.
+- **Agent structurant** : reformule le sujet en opportunités mieux cadrées, propose des
+  axes et fait converger vers des options solides.
 
-## 7. UI architecture
+Optionnellement, un troisième rôle « chercheur » apporte du contexte (mode débat).
 
-Recommended pages:
+Règle produit : l'IA **aide à converger**, elle ne remplace pas la décision de
+l'équipe.
 
-- `GET /refinement`
-- `GET /refinement/sessions/{session_id}`
-- `GET /refinement/sessions/{session_id}/result`
+## 7. Workflow LangGraph
 
-Recommended workspace layout:
-
-- left panel: Azure DevOps work item summary
-- center panel: current question round and answer form
-- right panel: live session summary with facts, assumptions, unknowns, risks
-
-Recommended HTMX usage:
-
-- load question round partials after session creation
-- submit answers asynchronously
-- refresh the session summary panel without a full reload
-- render the final artifact partial when the session reaches `FINAL_READY`
-
-## 8. Routing model
-
-Mirror the `../app` split between HTML pages and JSON endpoints.
-
-### 8.1 HTML routes
-
-- `GET /refinement`
-- `GET /refinement/sessions/{session_id}`
-- `GET /refinement/sessions/{session_id}/result`
-
-### 8.2 JSON and HTMX endpoints
-
-- `GET /api/refinement/work-items/search`
-- `GET /api/refinement/work-items/{id}`
-- `POST /api/refinement/sessions`
-- `GET /api/refinement/sessions/{session_id}`
-- `POST /api/refinement/sessions/{session_id}/answers`
-- `GET /api/refinement/sessions/{session_id}/export`
-
-Optional HTMX partial endpoints if needed:
-
-- `GET /api/refinement/sessions/{session_id}/partials/current-round`
-- `GET /api/refinement/sessions/{session_id}/partials/summary`
-- `GET /api/refinement/sessions/{session_id}/partials/final-artifact`
-
-## 9. LangGraph workflow
-
-The core flow is a single graph, not multiple agents.
+Le cœur est un graphe unique centré sur le raffinement d'un nœud d'idée.
 
 ```mermaid
 flowchart TB
-    START --> load_work_item
-    load_work_item --> compile_context
-    compile_context --> generate_questions
-    generate_questions --> await_human_answers
-    await_human_answers --> summarize_context
-    summarize_context --> decide_next_step
-    decide_next_step -->|more context needed| compile_context
-    decide_next_step -->|enough context| generate_final_refinement
-    generate_final_refinement --> END
+    START --> load_node
+    load_node --> compile_context
+    compile_context --> generate_axes
+    generate_axes --> await_human_answers
+    await_human_answers --> critique_and_summarize
+    critique_and_summarize --> score
+    score --> decide_next_step
+    decide_next_step -->|contexte insuffisant| compile_context
+    decide_next_step -->|assez de contexte| generate_deliverable
+    generate_deliverable --> END
 ```
 
-### 9.1 Graph node intent
+### 7.1 Intention des nœuds
 
-- `load_work_item`: fetch and normalize Azure DevOps data
-- `compile_context`: build the compact prompt input from work item, notes, and answers
-- `generate_questions`: create the next best question round
-- `await_human_answers`: interruption boundary managed by the web app
-- `summarize_context`: extract facts, assumptions, unknowns, dependencies, risks
-- `decide_next_step`: stop or loop
-- `generate_final_refinement`: produce the final structured artifact
+- `load_node` : charger le nœud d'idée et son contexte (parent, historique).
+- `compile_context` : construire l'entrée de prompt compacte (idée, notes, réponses).
+- `generate_axes` : générer 4 à 6 axes / questions (problème, cible, valeur, risque,
+  dépendances, métriques).
+- `await_human_answers` : frontière d'interruption gérée par l'app web.
+- `critique_and_summarize` : extraire faits, hypothèses, inconnues, dépendances,
+  risques ; repérer les flous.
+- `score` : évaluer impact / effort / risque / confiance.
+- `decide_next_step` : boucler ou s'arrêter.
+- `generate_deliverable` : produire le livrable structuré (brief / backlog / cadrage).
 
-### 9.2 Human-in-the-loop strategy
+### 7.2 Human-in-the-loop
 
-Use the same pattern already present in `../app`.
+- compiler le graphe avec support de checkpoint
+- utiliser `thread_id` aligné sur l'entité raffinée
+- interrompre avant `await_human_answers`
+- rendre la main à la couche route FastAPI
+- persister les réponses en PostgreSQL
+- reprendre le graphe avec le même `thread_id`
 
-- compile the graph with checkpoint support
-- use `thread_id=session_id`
-- interrupt before `await_human_answers`
-- return control to the FastAPI route layer
-- persist answers in PostgreSQL
-- resume the graph with the same `thread_id`
+Important :
 
-Important:
+- les checkpoints LangGraph aident à reprendre proprement le workflow
+- les tables applicatives restent la trace d'audit durable
+- le graphe ne doit jamais être le seul endroit où existent réponses ou sorties
 
-- LangGraph checkpoints help the workflow resume cleanly
-- application tables remain the durable audit trail
-- the graph should never be the only place where answers or outputs exist
+### 7.3 Checkpoints
 
-### 9.3 Checkpoint strategy
+- dev local : checkpointer en mémoire ou SQLite
+- environnements partagés : checkpointer PostgreSQL
 
-Recommended progression:
+L'état doit être reprenable après rafraîchissement du navigateur, redémarrage backend,
+ou pause de l'utilisateur entre deux tours.
 
-- local dev: in-memory or sqlite-backed checkpointer if needed
-- shared environments: PostgreSQL-backed checkpointer
-
-The graph state should be resumable after:
-
-- browser refresh
-- backend restart
-- user pause between rounds
-
-## 10. Recommended graph state
+## 8. État du graphe (esquisse)
 
 ```python
 class RefinementState(TypedDict):
-    session_id: str
-    work_item_id: str
-    work_item: dict
+    board_id: str
+    node_id: str
+    idea: str
+    parent_context: str
     extra_context: str
     round: int
     max_rounds: int
     max_questions_per_round: int
+    axes: list[dict]
     asked_questions: list[dict]
     answers: list[dict]
     facts: list[str]
@@ -279,143 +192,83 @@ class RefinementState(TypedDict):
     unknowns: list[str]
     dependencies: list[str]
     risks: list[str]
+    scores: dict           # impact / effort / risque / confiance
     confidence: str
     enough_context: bool
-    final_artifact: dict | None
+    deliverable: dict | None
     errors: list[dict]
 ```
 
-This state stays compact on purpose. The raw transcript and raw payloads should be
-stored in database tables, not expanded into every graph transition.
+L'état reste compact volontairement. Les transcripts et payloads bruts vont dans les
+tables, pas dans chaque transition du graphe.
 
-## 11. Azure DevOps integration
+## 9. Modèle de persistance
 
-The integration should be wrapped behind a dedicated service and adapter.
+Voir `docs/sqlalchemy-data-model.md` pour le modèle relationnel cible. Tables clés :
+`workspaces`, `boards`, `nodes`, `node_refinements`, `scores`, `votes`, `exports`.
 
-Responsibilities:
+## 10. Modèle d'interaction LLM
 
-- search work items
-- fetch detailed work item data
-- normalize organization-specific fields into an internal DTO
-- preserve raw payloads for traceability
+La boucle LLM ne rejoue pas un transcript brut à chaque appel. Trois couches :
 
-Minimum fields to normalize:
+1. contexte source (l'idée, ses parents, les notes)
+2. journal d'interaction (questions / réponses)
+3. résumé compilé du nœud
 
-- id
-- type
-- title
-- description
-- acceptance criteria
-- tags
-- area path
-- iteration path
-- priority
-- state
-- relations
+Étapes :
 
-Engineering notes:
+1. `generate-axes` / `generate-questions`
+2. `critique-and-summarize`
+3. `generate-deliverable`
 
-- descriptions are often HTML and require sanitization and plain-text extraction
-- field mappings vary between Azure DevOps organizations and must remain configurable
+Toutes les sorties doivent être du JSON strict, validé contre les schémas de
+`contracts/`, parsé par des modèles Pydantic avant persistance.
 
-## 12. Persistence model
+> Note : les schémas de `contracts/` reflètent encore l'API du POC de refinement de
+> tickets et devront évoluer avec le code vers le domaine board.
 
-Use PostgreSQL tables for:
+## 11. Sécurité et accès
 
-- refinement sessions
-- work item snapshots
-- question rounds and questions
-- answers
-- session summaries
-- final artifacts
-- optional prompt run metadata
+- garder les credentials LLM côté serveur uniquement
+- ne jamais exposer les clés fournisseur au navigateur
+- rédiger (redact) les secrets dans logs et traces
+- exiger l'authentification pour accéder à un workspace / board
+- traiter avec soin les contenus saisis (un board peut contenir des infos sensibles)
 
-See `docs/sqlalchemy-data-model.md` for the target relational model.
+## 12. Observabilité
 
-## 13. LLM interaction model
+Tracer au minimum :
 
-The LLM loop should not replay a raw chat transcript on every call.
+- board créé, nœud créé
+- tour de refinement généré
+- réponses soumises
+- critique / résumé généré
+- score calculé
+- livrable généré
+- échec de validation de schéma
+- erreur fournisseur
+- latence et tokens par étape du graphe
 
-Use three layers:
+Attributs de trace recommandés : `board_id`, `node_id`, `thread_id`, `prompt_version`,
+`model`, `round`, `enough_context`, `confidence`.
 
-1. source context
-2. interaction log
-3. compiled session summary
+## 13. Backlog priorisé
 
-Stages:
+| Priorité | Fonction | Pourquoi |
+| :-- | :-- | :-- |
+| P0 | Créer un board et une idée racine | Sans ça, aucun workflow ne commence. |
+| P0 | Raffinement IA par axes | C'est le cœur différenciant du produit. |
+| P0 | Scoring et décision | C'est ce qui fait converger l'équipe. |
+| P0 | Export brief / backlog | C'est la preuve de valeur métier. |
+| P1 | Collaboration basique | Nécessaire pour tester l'usage équipe. |
+| P1 | Templates par cas d'usage | Réduit le temps au premier résultat. |
+| P2 | Intégration Jira / Linear / Azure DevOps | Utile plus tard, pas au test MVP. |
+| P2 | Permissions avancées et billing | Important commercialement, mais post-MVP. |
 
-1. `generate-questions`
-2. `summarize-context`
-3. `generate-final-refinement`
+## 14. Chemin d'évolution
 
-All outputs must be:
-
-- strict JSON
-- validated against the contract schemas in `contracts/`
-- parsed by `Pydantic` models before persistence
-
-## 14. Output contract philosophy
-
-Structured outputs are non-negotiable for this tool.
-
-Benefits:
-
-- deterministic rendering in Jinja partials
-- safer LangGraph loop transitions
-- easier markdown export
-- easier prompt regression testing
-
-## 15. Security and access model
-
-- keep Azure DevOps credentials server-side only
-- never expose PATs or LLM credentials to the browser
-- redact secrets from logs and traces
-- require authentication for refinement sessions
-- persist source payloads carefully because tickets may contain sensitive details
-
-## 16. Observability
-
-Track at minimum:
-
-- session created
-- work item fetched
-- round generated
-- answers submitted
-- summary generated
-- final artifact generated
-- schema validation failure
-- provider error
-- latency per graph stage
-- token usage per graph stage
-
-Recommended trace attributes:
-
-- session_id
-- work_item_id
-- thread_id
-- prompt_version
-- model
-- round
-- enough_context
-- confidence
-
-## 17. Evolution path to MCP and deeper context
-
-Once the human loop works reliably, add pluggable context sources.
-
-Recommended interfaces:
-
-- `WorkItemProvider`
-- `ContextSource`
-- `RefinementEngine`
-- `ArtifactRenderer`
-
-Future context sources:
-
-- repository context via MCP
-- pipeline YAML context via MCP
-- release notes context
-- architecture decision records
-
-That keeps the current MVP simple while leaving a clean expansion path toward the
-long-term LangGraph and MCP vision.
+Une fois la boucle humaine fiable, ajouter des sources de contexte pluggables via des
+interfaces stables (`ContextSource`, `RefinementEngine`, `DeliverableRenderer`) :
+mémoire produit inter-sessions, templates verticaux (idée SaaS, initiative technique,
+opportunité produit), puis connecteurs de delivery. Cela garde le MVP simple tout en
+laissant un chemin d'expansion propre.

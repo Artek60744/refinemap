@@ -1,0 +1,224 @@
+<!DOCTYPE html><html class="h-full" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>PromptRefine - Home</title>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;family=Nunito+Sans:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#773200",
+                        "secondary-fixed-dim": "#cbbeff",
+                        "surface-bright": "#f7f9ff",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-container": "#c0c9ff",
+                        "secondary-container": "#795bec",
+                        "on-secondary-fixed": "#1d0061",
+                        "on-primary-fixed": "#001258",
+                        "on-secondary-fixed-variant": "#4a22bb",
+                        "surface-variant": "#e0e3e8",
+                        "secondary": "#603fd1",
+                        "inverse-surface": "#2d3135",
+                        "on-surface-variant": "#444653",
+                        "inverse-on-surface": "#eef1f6",
+                        "on-error": "#ffffff",
+                        "border-subtle": "#E9ECEF",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-low": "#f1f4f9",
+                        "tertiary-container": "#903e00",
+                        "on-secondary": "#ffffff",
+                        "tertiary-fixed": "#ffdbca",
+                        "surface-dim": "#d7dadf",
+                        "surface-container-high": "#e5e8ee",
+                        "on-primary": "#ffffff",
+                        "surface": "#f7f9ff",
+                        "on-primary-fixed-variant": "#213ba7",
+                        "primary": "#16329f",
+                        "secondary-fixed": "#e6deff",
+                        "primary-container": "#344cb7",
+                        "error-container": "#ffdad6",
+                        "tertiary": "#6b2c00",
+                        "primary-fixed": "#dee1ff",
+                        "outline": "#757684",
+                        "accent-yellow": "#FFD32D",
+                        "on-error-container": "#93000a",
+                        "on-secondary-container": "#fffbff",
+                        "tertiary-fixed-dim": "#ffb68f",
+                        "on-tertiary-container": "#ffbe9c",
+                        "inverse-primary": "#b9c3ff",
+                        "on-tertiary-fixed": "#331100",
+                        "error": "#ba1a1a",
+                        "canvas-bg": "#F8F9FA",
+                        "background": "#f7f9ff",
+                        "surface-container": "#ebeef3",
+                        "outline-variant": "#c5c5d5",
+                        "surface-container-highest": "#e0e3e8",
+                        "primary-fixed-dim": "#b9c3ff",
+                        "surface-tint": "#3d55c0",
+                        "on-surface": "#181c20",
+                        "on-background": "#181c20"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "margin-desktop": "24px",
+                        "margin-mobile": "16px",
+                        "toolbar-height": "48px",
+                        "unit": "4px",
+                        "panel-width": "280px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Hanken Grotesk"],
+                        "body-md": ["Nunito Sans"],
+                        "label-sm": ["Nunito Sans"],
+                        "label-md": ["Nunito Sans"],
+                        "body-lg": ["Nunito Sans"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "display": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.03em", "fontWeight": "700" }],
+                        "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-lg": ["28px", { "lineHeight": "36px", "fontWeight": "600" }],
+                        "display": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Base styles */
+        body {
+            background-color: theme('colors.canvas-bg');
+            color: theme('colors.on-surface');
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        
+        .textarea-focus-ring:focus-within {
+            box-shadow: 0 0 0 2px theme('colors.primary');
+            border-color: theme('colors.primary');
+        }
+
+        /* Subtle grid pattern for canvas background */
+        .canvas-grid {
+            background-image: 
+                linear-gradient(to right, theme('colors.border-subtle') 1px, transparent 1px),
+                linear-gradient(to bottom, theme('colors.border-subtle') 1px, transparent 1px);
+            background-size: 40px 40px;
+            background-position: center top;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col overflow-hidden">
+<!-- Top Navigation Shell -->
+<header class="fixed top-0 w-full h-[48px] z-50 flex justify-between items-center px-margin-desktop bg-surface dark:bg-inverse-surface border-b border-border-subtle dark:border-outline-variant flat no shadows">
+<!-- Brand/Logo -->
+<div class="flex items-center gap-3">
+<img alt="PromptRefine Logo" class="h-6 w-6 object-contain rounded" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCW8Ydnt1pjaSuuOkoaNpK1bp7aL7xVEgZAfXu4_neIosXkFUY8fo12xP_7XfMCd5zqMPdCevOiuoIYykQoU54l85QQLB-BZJSCDd_g3XlCDrD7CpUKO31N87WHuGyh0IDgl8VMQpqPoASztCeXDwjnvcgt6Z0dE5ejZxtDqgqdkEkxTfwH5Ptb1QeXYEj6veWO7sCIaJSw3dhJCH8ErNWSug3IN5wx5RNL-za3Oo-Oc_JJ8__8SL3-">
+<span class="font-headline-md text-headline-md text-primary dark:text-inverse-primary tracking-tight">PromptRefine</span>
+</div>
+<!-- Navigation Links (Desktop) -->
+<nav class="hidden md:flex items-center gap-6 h-full">
+<!-- Active State Navigation -->
+<a class="h-full flex items-center text-primary dark:text-inverse-primary font-bold border-b-2 border-primary hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors cursor-pointer active:scale-95 transition-transform px-2 font-label-md text-label-md" href="#">
+                Dashboard
+            </a>
+<!-- Inactive State Navigation -->
+<a class="h-full flex items-center text-on-surface-variant dark:text-outline hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors cursor-pointer active:scale-95 transition-transform px-2 font-label-md text-label-md" href="#">
+                History
+            </a>
+<a class="h-full flex items-center text-on-surface-variant dark:text-outline hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors cursor-pointer active:scale-95 transition-transform px-2 font-label-md text-label-md" href="#">
+                Templates
+            </a>
+</nav>
+<!-- Trailing Actions -->
+<div class="flex items-center gap-2">
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-low rounded-full transition-colors cursor-pointer active:scale-95">
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-low rounded-full transition-colors cursor-pointer active:scale-95">
+<span class="material-symbols-outlined text-[20px]" data-icon="settings">settings</span>
+</button>
+<!-- User Profile Avatar Placeholder -->
+<div class="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center ml-2 border border-border-subtle overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A small, professional user avatar portrait for a SaaS platform. Soft lighting, neutral background, abstract geometric pattern indicating a generic user profile. Minimalist modern style, high key lighting, crisp details, maintaining a clean corporate aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBfikYYcBcADrKCg8nLbkcK32aq9GCb6KJz4jkTN8UzcM5g6GfQ1a99g4azrl9I6DBZ87MzXJMkV16rZoJ2la1uqkl0oZVpxSEEFMkO6IS3SEUjobrG_OUMEaVDCtwFpOcwGHHdRseM4VUsy1DWHGiW_b1CHAcgTtSuTOvh4RCqh_2aFhrUiLIeH7qdt-17yCDwdWGa-Ul0afnHZjtQ2TGqL0e5W9JItS091fqt7XP8Gp34rHXB-ykL">
+</div>
+</div>
+</header>
+<!-- Main Content Area (Canvas Stage) -->
+<main class="flex-1 mt-[48px] relative canvas-grid flex flex-col items-center justify-center px-4 md:px-0">
+<!-- Refinement Interface Container -->
+<div class="w-full max-w-3xl flex flex-col items-center">
+<!-- Context/Prompt Heading -->
+<div class="mb-8 text-center">
+<h1 class="font-display text-display text-on-surface mb-2">Refine Your Intent</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant">Passe d’une idée floue à un sujet exploitable en 15 minutes</p>
+</div>
+<!-- Input Area -->
+<div class="w-full bg-surface-container-lowest rounded-xl border border-border-subtle shadow-sm textarea-focus-ring transition-all duration-200 overflow-hidden flex flex-col">
+<!-- Toolbar for Input (Optional, keeps it looking like an editor) -->
+<div class="flex items-center px-4 py-2 border-b border-border-subtle bg-surface-container-low gap-2">
+<button class="p-1 text-on-surface-variant hover:text-primary rounded transition-colors" title="Formatting">
+<span class="material-symbols-outlined text-[18px]">format_bold</span>
+</button>
+<button class="p-1 text-on-surface-variant hover:text-primary rounded transition-colors" title="Insert Variable">
+<span class="material-symbols-outlined text-[18px]">data_object</span>
+</button>
+<div class="h-4 w-px bg-border-subtle mx-1"></div>
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Drafting</span>
+</div>
+<textarea aria-label="Prompt Input Area" class="w-full h-48 md:h-64 p-6 bg-transparent border-none resize-none focus:ring-0 font-body-lg text-body-lg text-on-surface placeholder:text-outline-variant outline-none" placeholder="e.g., 'Mettre en place du gardien des secrets (KV) utilisateurs'"></textarea>
+<!-- Input Footer / Character Count -->
+<div class="flex justify-between items-center px-4 py-3 border-t border-border-subtle bg-surface-container-lowest">
+<span class="font-label-sm text-label-sm text-outline">0 / 2000 chars</span>
+<button class="flex items-center justify-center gap-2 bg-primary-container text-on-primary px-6 py-2 rounded font-label-md text-label-md hover:opacity-90 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[18px]" data-icon="auto_awesome">auto_awesome</span>
+                        Refine
+                    </button>
+</div>
+</div>
+<!-- Suggestion Chips (Minimalist) -->
+<div class="mt-6 flex flex-wrap gap-2 justify-center">
+
+
+
+
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Shell (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 w-full h-[56px] z-50 bg-surface border-t border-border-subtle flex justify-around items-center px-2">
+<a class="flex flex-col items-center justify-center w-full h-full text-primary" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-label-sm text-label-sm">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center w-full h-full text-on-surface-variant hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined mb-1">history</span>
+<span class="font-label-sm text-label-sm">History</span>
+</a>
+<a class="flex flex-col items-center justify-center w-full h-full text-on-surface-variant hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined mb-1">description</span>
+<span class="font-label-sm text-label-sm">Templates</span>
+</a>
+</nav>
+<script>
+        // Simple auto-resize logic for textarea if needed, though fixed height is preferred in minimalist layouts.
+        // Keeping it focused and clean.
+    </script>
+
+
+</body></html>

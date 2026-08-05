@@ -1,189 +1,148 @@
-# Implementation Plan
+# Plan d'implémentation — MVP 6 semaines
 
-## Phase 0 - Project framing
+Objectif du MVP : livrer **un seul workflow de bout en bout** — transformer un
+brainstorm d'équipe en décision priorisée puis en artefact exploitable, dans une seule
+session. Un seul persona, un seul workflow, une seule promesse.
 
-Goal:
+Ce plan suit la logique « decision board for product teams ». Il s'appuie sur le socle
+technique déjà en place (FastAPI + LangGraph + SQLAlchemy + React) ; le code ADO
+existant est traité comme un POC dont on retire la spécificité au fil des semaines.
 
-- lock the MVP scope and align it with the patterns already used in `../app`
+## Semaine 1 — Cadrage
 
-Tasks:
+Objectif : verrouiller le problème, les écrans et les critères de succès avant de
+coder. Un MVP B2B échoue surtout par mauvais scope.
 
-1. confirm the first supported Azure DevOps work item types
-2. list the exact Azure DevOps fields that matter in your organization
-3. validate the target final refinement format with tech leads
-4. choose the session and auth model to reuse from the existing app ecosystem
+À faire :
 
-Exit criteria:
+- interviewer 5 à 8 profils cibles (PM, PO, lead dev, innovation manager)
+- valider les douleurs récurrentes : idées dispersées, réunions non exploitables,
+  difficulté à prioriser, perte de contexte avant exécution
+- dessiner **4 vues seulement** : accueil, board de refinement, vue scoring, export
+  final
+- définir le KPI d'activation : « une équipe crée un board, raffine une idée, obtient
+  un export final dans la même session »
 
-- final artifact structure approved
-- Azure DevOps field map identified
-- target users and access rules identified
+Livrables :
 
-## Phase 1 - FastAPI foundation
+- ICP précis
+- user journey
+- liste stricte des fonctionnalités V1
+- maquette low-fi cliquable ou schéma d'écrans
 
-Goal:
+## Semaine 2 — Base produit
 
-- create the application shell with routes, templates, config, and persistence
+Objectif : construire la base et l'expérience de création de board, avec un onboarding
+qui permet de démarrer en moins de 2 minutes.
 
-Tasks:
+À développer :
 
-1. scaffold `src/main.py`, `src/routes/`, `src/api/`, `src/templates/`, `src/static/`
-2. add `pydantic-settings` configuration aligned with the style used in `../app`
-3. add `database.py`, `SQLAlchemy` base, and `Alembic`
-4. add a base Jinja layout and a first `refinement/index.html`
-5. wire minimal auth or reuse the existing auth approach if this app is merged later
+- auth simple (magic link ou Google) + appartenance workspace
+- création workspace + board
+- modèle de données minimal : `workspace`, `user`, `board`, `node`, `score`, `export`
+  (voir `docs/sqlalchemy-data-model.md`)
+- UI board en arborescence simple (semi-map), même sans temps réel avancé
+- starter templates : feature idea, product opportunity, technical initiative
 
-Exit criteria:
+Décision importante : ne pas faire une vraie mind map ultra complexe au départ ; une
+structure hiérarchique visuelle semi-map est plus simple à livrer et maintenir en
+6 semaines.
 
-- app boots locally with FastAPI
-- templates render correctly
-- database session dependency works
+Côté code existant : remplacer le bootstrap `create_all()` par Alembic, retirer les
+tables/champs Azure DevOps, introduire les entités board.
 
-## Phase 2 - Azure DevOps integration
+## Semaine 3 — Moteur de refinement IA
 
-Goal:
+Objectif : livrer le cœur différenciant. Il doit transformer un tableau d'idées en
+conversation structurée, pas en simples post-its numériques.
 
-- make work item selection usable from the UI
+À développer :
 
-Tasks:
+- bouton **Refine** sur une idée / un nœud
+- génération de 4 à 6 axes automatiques (problème, cible, valeur, risque, dépendances,
+  métriques)
+- **agent critique** : pose des questions de clarification, repère les zones vagues
+- **agent structurant** : reformule le sujet en opportunités mieux cadrées
+- historique simple des itérations sur chaque nœud
 
-1. implement `AzureDevOpsRefinementService`
-2. add `GET /api/refinement/work-items/search`
-3. add `GET /api/refinement/work-items/{id}`
-4. normalize raw Azure DevOps fields into an internal work item DTO
-5. store a raw payload snapshot for traceability
+Règle produit : l'IA ne doit pas tout écrire à la place de l'équipe ; elle pose les
+bonnes questions, propose des angles et aide à converger.
 
-Exit criteria:
+Côté code existant : réorienter le graphe LangGraph (`src/agents/refinement_workflow/`)
+autour du nœud d'idée plutôt que du work item ADO.
 
-- a user can search for work items
-- a user can open a work item summary card
-- HTML fields are safely prepared for prompting and display
+## Semaine 4 — Couche décisionnelle
 
-## Phase 3 - LangGraph session loop
+Objectif : ajouter l'arbitrage explicite et partageable. Sans cette semaine, on reste
+un outil de discussion visuelle parmi d'autres.
 
-Goal:
+À développer :
 
-- ask the first useful question round and persist workflow state correctly
+- scoring manuel ou semi-assisté sur impact, effort, risque, confiance, urgence
+- vue matrice simple impact/effort ou priorisation pondérée
+- vote ou réactions d'équipe
+- résumé IA : « voici les 3 options les plus crédibles et pourquoi »
+- tag **Go / Explore / Drop** sur chaque idée principale
 
-Tasks:
+À tester :
 
-1. implement the `refinement_workflow` graph
-2. define `RefinementState`
-3. create graph nodes for load, compile, question generation, summarization, and final output
-4. compile the graph with checkpoint support
-5. align `thread_id` with the application `session_id`
-6. interrupt before human answer collection
+- l'équipe peut-elle arriver à une décision sans sortir du produit ?
+- les critères de décision sont-ils compréhensibles et visibles ?
 
-Exit criteria:
+## Semaine 5 — Exports
 
-- a session can start and produce the first question round
-- the graph can be resumed for the same `session_id`
-- graph state and database state remain aligned
+Objectif : fermer la boucle avec un export exploitable. La vraie valeur perçue vient
+du passage discovery → exécution ; il faut éviter le « whiteboard joli mais mort ».
 
-## Phase 4 - Session persistence and API contracts
+À développer :
 
-Goal:
+- export **brief produit** en Markdown
+- export **backlog initial** en CSV ou JSON
+- export **note de cadrage** (contexte, options, décision, risques, prochaines étapes)
+- résumé partageable par lien public en lecture seule
+- template d'output pour PM et template d'output pour Tech Lead
 
-- persist every meaningful artifact of the refinement workflow
+Livrable clé : un PM doit pouvoir animer un atelier, prioriser, puis repartir avec un
+document directement exploitable dans son flux de travail.
 
-Tasks:
+## Semaine 6 — Bêta fermée
 
-1. implement SQLAlchemy models from `docs/sqlalchemy-data-model.md`
-2. add repositories for sessions, rounds, answers, summaries, and artifacts
-3. implement `POST /api/refinement/sessions`
-4. implement `GET /api/refinement/sessions/{session_id}`
-5. implement `POST /api/refinement/sessions/{session_id}/answers`
-6. validate LLM outputs with `Pydantic` and JSON Schema before persistence
+Objectif : observation d'usage réel et corrections rapides. Un MVP B2B n'est validé que
+si un utilisateur réel peut finir son vrai job sans revenir à son ancien enchaînement
+d'outils.
 
-Exit criteria:
+À faire :
 
-- question rounds and answers are durable in PostgreSQL
-- malformed model outputs are rejected safely
-- session reload after refresh works
+- recruter 3 à 5 équipes pilotes
+- sessions assistées de 30 à 45 minutes
+- mesurer : temps jusqu'au premier board, taux de refinement complet, taux d'export,
+  nombre d'idées finalisées, retour à Miro / Notion / Jira pendant le test
+- corriger en priorité les blocages d'onboarding, la lisibilité du scoring et la
+  qualité des exports
+- préparer une landing page avec une promesse unique et un formulaire waitlist bêta
 
-## Phase 5 - HTMX workflow experience
+## Critère de validation MVP
 
-Goal:
+Une équipe part d'une idée brute et produit une **décision + un artefact de sortie dans
+une seule session**, sans repasser par son outil précédent pour le travail principal.
 
-- make the iterative refinement flow smooth without a SPA
+On mesure la **complétion du workflow**, pas le nombre de clics ou d'inscriptions.
 
-Tasks:
+## Découpage en sprints
 
-1. build the session workspace page
-2. add HTMX forms for answer submission
-3. add partial refresh for question round and session summary
-4. display progress, current round, confidence, and open unknowns
-5. handle the transition to `FINAL_READY` cleanly
+| Sprint | Semaines | Focus |
+| :-- | :-- | :-- |
+| Sprint 1 | 1–2 | Cadrage + base produit |
+| Sprint 2 | 3–4 | Moteur de refinement + couche décisionnelle |
+| Sprint 3 | 5–6 | Exports + bêta fermée |
 
-Exit criteria:
+## Mapping vers le code existant
 
-- the user can refine a ticket without full-page reloads between rounds
-- the session summary panel updates consistently
-- the UI clearly signals when refinement is complete
-
-## Phase 6 - Final artifact generation and export
-
-Goal:
-
-- produce a delivery-ready refinement output
-
-Tasks:
-
-1. implement final generation using `generate-final-refinement.md`
-2. validate against `final-refinement.schema.json`
-3. render the artifact in Jinja templates
-4. add markdown export
-5. label assumptions and unresolved questions explicitly
-
-Exit criteria:
-
-- a user can obtain a final structured refinement output
-- the artifact can be copied or exported as markdown
-
-## Phase 7 - Hardening and observability
-
-Goal:
-
-- make the MVP safe and diagnosable in real team usage
-
-Tasks:
-
-1. add structured logging
-2. add LangGraph stage tracing and token usage tracking
-3. add `Langfuse` or equivalent prompt traces
-4. redact secrets from logs
-5. add retry policy for transient Azure DevOps and LLM errors
-6. tune prompts using a small set of real backlog items
-
-Exit criteria:
-
-- common failures are diagnosable
-- prompt behavior is observable
-- internal pilot usage is possible
-
-## Suggested sprint split
-
-Sprint 1:
-
-- phases 1 and 2
-
-Sprint 2:
-
-- phases 3 and 4
-
-Sprint 3:
-
-- phases 5 and 6
-
-Sprint 4:
-
-- phase 7 and prompt tuning
-
-## Validation checklist for the first pilot
-
-- did the questions reduce ambiguity quickly
-- did the loop avoid asking redundant questions
-- did the final split look realistic to the team
-- were CI/CD and test impacts captured often enough
-- did the HTMX flow feel simple enough for workshop usage
-- did users trust the separation between facts and assumptions
+- **Réutilisable tel quel** : shell FastAPI (`src/main.py`), config
+  (`src/config/settings.py`), abstraction LLM (`src/services/refinement_llm.py`),
+  chargement de prompts, SPA React et i18n.
+- **À réorienter** : graphe LangGraph (`src/agents/refinement_workflow/`) vers le nœud
+  d'idée ; schémas Pydantic (`src/api/schemas_refinement.py`) ; contrats de `contracts/`.
+- **À retirer** : `src/services/azure_devops_refinement.py`, les tables
+  `work_item_snapshots` et les champs ADO de `refinement_sessions`, les écrans de
+  sélection de work item.

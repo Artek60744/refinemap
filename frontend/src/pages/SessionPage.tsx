@@ -73,14 +73,14 @@ export default function SessionPage() {
 
   if (loadError) {
     return (
-      <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">
+      <div className="rounded-lg border border-error/30 bg-error-container/50 p-4 text-sm text-error">
         {loadError}
       </div>
     );
   }
 
   if (!detail) {
-    return <p className="text-sm text-slate-400">{t("common.loading")}</p>;
+    return <p className="text-sm text-on-surface-variant">{t("common.loading")}</p>;
   }
 
   const { session, workItem, currentQuestionRound, sessionSummary, finalArtifact } = detail;
@@ -89,17 +89,17 @@ export default function SessionPage() {
     <>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm text-violet-300">Session {session.id}</p>
-          <h3 className="text-2xl font-semibold tracking-tight">{workItem.title}</h3>
-          <p className="mt-2 text-sm text-slate-400">
-            {t("session.round")} {session.round} / {session.maxRounds} • {t("session.status")}{" "}
+          <p className="text-xs font-semibold uppercase tracking-wider text-primary">Session {session.id}</p>
+          <h3 className="font-headline-lg text-headline-lg text-on-surface">{workItem.title}</h3>
+          <p className="mt-1 font-body-md text-body-md text-on-surface-variant">
+            {t("session.round")} {session.round} / {session.maxRounds} · {t("session.status")}{" "}
             {label("status", session.status)}
           </p>
         </div>
         {finalArtifact && (
           <Link
             to={`/refinement/sessions/${session.id}/result`}
-            className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20"
+            className="rounded-lg border border-primary/20 bg-primary-fixed/30 px-4 py-3 text-sm font-semibold text-on-primary-fixed-variant hover:bg-primary-fixed/50 transition-colors no-underline"
           >
             {t("session.view_final")}
           </Link>
@@ -109,18 +109,18 @@ export default function SessionPage() {
       <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr_0.9fr]">
         <WorkItemCard workItem={workItem} />
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+        <div className="rounded-xl border border-border-subtle bg-surface-container-lowest p-6 shadow-sm">
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <p className="text-sm text-violet-300">{t("session.questions")}</p>
-              <h4 className="text-xl font-semibold tracking-tight">{t("session.current_round")}</h4>
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">{t("session.questions")}</p>
+              <h4 className="font-headline-md text-headline-md text-on-surface">{t("session.current_round")}</h4>
             </div>
-            <span className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs text-slate-300">
+            <span className="rounded-full border border-border-subtle bg-surface-container-low px-3 py-1 text-xs font-medium text-on-surface-variant">
               {label("status", session.status)}
             </span>
           </div>
           {submitError && (
-            <div className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">
+            <div className="mb-4 rounded-lg border border-error/30 bg-error-container/50 p-4 text-sm text-error">
               {submitError}
             </div>
           )}
@@ -136,15 +136,15 @@ export default function SessionPage() {
       </section>
 
       {finalArtifact && (
-        <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <section className="mt-6 rounded-xl border border-border-subtle bg-surface-container-lowest p-6 shadow-sm">
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <p className="text-sm text-violet-300">{t("session.result_eyebrow")}</p>
-              <h4 className="text-xl font-semibold tracking-tight">{t("session.result_title")}</h4>
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">{t("session.result_eyebrow")}</p>
+              <h4 className="font-headline-md text-headline-md text-on-surface">{t("session.result_title")}</h4>
             </div>
             <a
               href={exportUrl(session.id)}
-              className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
+              className="rounded-lg border border-border-subtle px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container-low transition-colors no-underline"
             >
               {t("session.export_markdown")}
             </a>

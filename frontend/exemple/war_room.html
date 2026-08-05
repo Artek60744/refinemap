@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en" style=""><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PromptRefine - War Room</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@600;700&amp;family=Nunito+Sans:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#773200",
+                        "secondary-fixed-dim": "#cbbeff",
+                        "surface-bright": "#f7f9ff",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-container": "#c0c9ff",
+                        "secondary-container": "#795bec",
+                        "on-secondary-fixed": "#1d0061",
+                        "on-primary-fixed": "#001258",
+                        "on-secondary-fixed-variant": "#4a22bb",
+                        "surface-variant": "#e0e3e8",
+                        "secondary": "#603fd1",
+                        "inverse-surface": "#2d3135",
+                        "on-surface-variant": "#444653",
+                        "inverse-on-surface": "#eef1f6",
+                        "on-error": "#ffffff",
+                        "border-subtle": "#E9ECEF",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-low": "#f1f4f9",
+                        "tertiary-container": "#903e00",
+                        "on-secondary": "#ffffff",
+                        "tertiary-fixed": "#ffdbca",
+                        "surface-dim": "#d7dadf",
+                        "surface-container-high": "#e5e8ee",
+                        "on-primary": "#ffffff",
+                        "surface": "#f7f9ff",
+                        "on-primary-fixed-variant": "#213ba7",
+                        "primary": "#16329f",
+                        "secondary-fixed": "#e6deff",
+                        "primary-container": "#344cb7",
+                        "error-container": "#ffdad6",
+                        "tertiary": "#6b2c00",
+                        "primary-fixed": "#dee1ff",
+                        "outline": "#757684",
+                        "accent-yellow": "#FFD32D",
+                        "on-error-container": "#93000a",
+                        "on-secondary-container": "#fffbff",
+                        "tertiary-fixed-dim": "#ffb68f",
+                        "on-tertiary-container": "#ffbe9c",
+                        "inverse-primary": "#b9c3ff",
+                        "on-tertiary-fixed": "#331100",
+                        "error": "#ba1a1a",
+                        "canvas-bg": "#F8F9FA",
+                        "background": "#f7f9ff",
+                        "surface-container": "#ebeef3",
+                        "outline-variant": "#c5c5d5",
+                        "surface-container-highest": "#e0e3e8",
+                        "primary-fixed-dim": "#b9c3ff",
+                        "surface-tint": "#3d55c0",
+                        "on-surface": "#181c20",
+                        "on-background": "#181c20",
+                        "node-blue": "#407BFF",
+                        "node-purple": "#9A66FF",
+                        "node-pink": "#FF578A",
+                        "node-orange": "#FF6B35",
+                        "node-yellow": "#FFB300",
+                        "score-good": "#34C759",
+                        "score-warn": "#FF9500",
+                        "score-alert": "#FF3B30"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "margin-desktop": "24px",
+                        "margin-mobile": "16px",
+                        "toolbar-height": "48px",
+                        "unit": "4px",
+                        "panel-width": "280px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Hanken Grotesk"],
+                        "body-md": ["Nunito Sans"],
+                        "label-sm": ["Nunito Sans"],
+                        "label-md": ["Nunito Sans"],
+                        "body-lg": ["Nunito Sans"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "display": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.03em", "fontWeight": "700" }],
+                        "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-lg": ["28px", { "lineHeight": "36px", "fontWeight": "600" }],
+                        "display": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+        }
+        
+        /* Tree map styles */
+        .tree-line::before {
+            content: '';
+            position: absolute;
+            left: 11px;
+            top: 24px;
+            bottom: 0;
+            width: 2px;
+            background-color: #E9ECEF;
+        }
+        .tree-node-line::after {
+            content: '';
+            position: absolute;
+            left: -12px;
+            top: 12px;
+            width: 12px;
+            height: 2px;
+            background-color: #E9ECEF;
+        }
+    </style>
+</head>
+<body class="bg-surface-container-low font-body-md text-on-surface h-screen overflow-hidden flex flex-col">
+<!-- TopNavBar -->
+<header class="fixed top-0 w-full h-[48px] z-50 flex justify-between items-center px-margin-desktop bg-surface dark:bg-inverse-surface border-b border-border-subtle dark:border-outline-variant flat no shadows">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<img alt="Refinement Logo" class="w-8 h-8 object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCW8Ydnt1pjaSuuOkoaNpK1bp7aL7xVEgZAfXu4_neIosXkFUY8fo12xP_7XfMCd5zqMPdCevOiuoIYykQoU54l85QQLB-BZJSCDd_g3XlCDrD7CpUKO31N87WHuGyh0IDgl8VMQpqPoASztCeXDwjnvcgt6Z0dE5ejZxtDqgqdkEkxTfwH5Ptb1QeXYEj6veWO7sCIaJSw3dhJCH8ErNWSug3IN5wx5RNL-za3Oo-Oc_JJ8__8SL3-"/>
+<span class="font-display text-display text-primary dark:text-inverse-primary text-[24px] leading-tight">PromptRefine</span>
+</div>
+<nav class="hidden md:flex h-full">
+<a class="h-full px-4 flex items-center text-on-surface-variant dark:text-outline font-label-md text-label-md hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors" href="#">Dashboard</a>
+<a class="h-full px-4 flex items-center text-primary dark:text-inverse-primary font-bold border-b-2 border-primary hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors" href="#">War Room</a>
+<a class="h-full px-4 flex items-center text-on-surface-variant dark:text-outline font-label-md text-label-md hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors" href="#">History</a>
+<a class="h-full px-4 flex items-center text-on-surface-variant dark:text-outline font-label-md text-label-md hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors" href="#">Templates</a>
+</nav>
+</div>
+<div class="flex items-center gap-2">
+<button class="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low rounded cursor-pointer active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low rounded cursor-pointer active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[20px]" data-icon="settings">settings</span>
+</button>
+<img alt="User profile" class="w-8 h-8 rounded-full ml-2 border border-border-subtle object-cover" data-alt="A professional headshot of a user profile avatar in a clean, modern style, neutral lighting, minimalist background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA8H_CrMxyc8htqbV_NbpyyaWsJKm2EiKidCxQNoTjsHPiAH0QmZdEIGrZBf5AR8hmjzBTF_XFyoNxy7vFc95vfIqwMXCgoPXTLpV1dm-0watlfNBYDWfZOxrpw5Gga1-mtoQjPCOPARRntlWpjHqsnFmnNcJ5huh1vVlf95hGrxIbm_igHZn-mhe2nhJDGHc22YALDF7V_x9F5_I-fqRanJgqzbxsaBoi2SFbdYmo3Sns9AhjXzkP5"/>
+</div>
+</header>
+<div class="flex flex-1 mt-[48px] overflow-hidden relative">
+<!-- ZONE 1: Structure (Left Sidebar) -->
+<aside class="w-[280px] bg-surface flex flex-col border-r border-border-subtle flex-shrink-0 z-20 overflow-y-auto">
+<div class="p-4 border-b border-border-subtle sticky top-0 bg-surface z-10">
+<h2 class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider mb-2">Intent Structure</h2>
+<p class="font-headline-md text-sm leading-tight text-on-surface">Create a python script to migrate user data to the new database schema.</p>
+</div>
+<div class="p-4">
+<!-- Tree Map View -->
+<div class="flex flex-col gap-1 relative tree-line">
+<!-- Objective Node -->
+<div class="flex items-center gap-2 group cursor-pointer relative z-10">
+<span class="material-symbols-outlined text-[16px] text-node-blue">arrow_drop_down</span>
+<span class="material-symbols-outlined text-[18px] text-node-blue">subject</span>
+<span class="font-label-md text-on-surface">Objective</span>
+</div>
+<div class="ml-6 pl-2 flex flex-col gap-2 my-1 border-l-2 border-border-subtle">
+<div class="flex items-center gap-2 text-on-surface-variant text-sm py-1 hover:bg-surface-container-low rounded px-2 cursor-pointer relative tree-node-line">
+<div class="w-1.5 h-1.5 rounded-full bg-node-blue"></div>
+<span class="truncate">Database type? (PostgreSQL 15)</span>
+</div>
+</div>
+<!-- Key Concepts Node -->
+<div class="flex items-center gap-2 group cursor-pointer mt-2 relative z-10">
+<span class="material-symbols-outlined text-[16px] text-node-purple">arrow_drop_down</span>
+<span class="material-symbols-outlined text-[18px] text-node-purple">key</span>
+<span class="font-label-md text-on-surface">Key Concepts</span>
+</div>
+<div class="ml-6 pl-2 flex flex-col gap-2 my-1 border-l-2 border-border-subtle">
+<div class="flex items-center gap-2 text-on-surface-variant text-sm py-1 hover:bg-surface-container-low rounded px-2 cursor-pointer relative tree-node-line">
+<div class="w-1.5 h-1.5 rounded-full bg-node-purple"></div>
+<span class="truncate">Infra concernée?</span>
+</div>
+</div>
+<!-- Technical Components Node (Active) -->
+<div class="flex items-center gap-2 group cursor-pointer mt-2 relative z-10 bg-surface-container-low rounded px-1 -mx-1 py-1">
+<span class="material-symbols-outlined text-[16px] text-node-pink">arrow_drop_down</span>
+<span class="material-symbols-outlined text-[18px] text-node-pink">build</span>
+<span class="font-label-md text-on-surface font-bold">Technical Components</span>
+</div>
+<div class="ml-6 pl-2 flex flex-col gap-2 my-1 border-l-2 border-border-subtle">
+<div class="flex items-center gap-2 text-on-surface text-sm py-1 bg-surface-container-highest rounded px-2 cursor-pointer font-bold relative tree-node-line">
+<div class="w-1.5 h-1.5 rounded-full bg-node-pink"></div>
+<span class="truncate">Dépendances?</span>
+</div>
+<div class="flex items-center gap-2 text-on-surface-variant text-sm py-1 hover:bg-surface-container-low rounded px-2 cursor-pointer relative tree-node-line">
+<div class="w-1.5 h-1.5 rounded-full border border-node-pink"></div>
+<span class="truncate text-on-surface-variant italic">Add component...</span>
+</div>
+</div>
+<!-- Implementation Process Node -->
+<div class="flex items-center gap-2 group cursor-pointer mt-2 relative z-10">
+<span class="material-symbols-outlined text-[16px] text-node-orange">arrow_right</span>
+<span class="material-symbols-outlined text-[18px] text-node-orange">account_tree</span>
+<span class="font-label-md text-on-surface">Implementation Process</span>
+</div>
+<!-- Best Practices Node -->
+<div class="flex items-center gap-2 group cursor-pointer mt-2 relative z-10">
+<span class="material-symbols-outlined text-[16px] text-node-yellow">arrow_drop_down</span>
+<span class="material-symbols-outlined text-[18px] text-node-yellow">verified</span>
+<span class="font-label-md text-on-surface">Best Practices</span>
+</div>
+<div class="ml-6 pl-2 flex flex-col gap-2 my-1 border-l-2 border-border-subtle">
+<div class="flex items-center gap-2 text-on-surface-variant text-sm py-1 hover:bg-surface-container-low rounded px-2 cursor-pointer relative tree-node-line">
+<div class="w-1.5 h-1.5 rounded-full bg-node-yellow"></div>
+<span class="truncate">Sécurité?</span>
+</div>
+</div>
+</div>
+</div>
+</aside>
+<!-- ZONE 2: Decision (Main Center Area - War Room) -->
+<main class="flex-1 bg-canvas-bg overflow-y-auto flex flex-col">
+<div class="p-6 max-w-[900px] mx-auto w-full flex flex-col gap-6">
+<!-- Top Metrics Row -->
+<div class="flex items-center justify-between">
+<h1 class="font-headline-lg text-headline-lg text-on-surface flex items-center gap-3">
+<span class="material-symbols-outlined text-[32px] text-primary">analytics</span>
+                Decision War Room
+            </h1>
+<div class="flex gap-4">
+<div class="bg-surface border border-border-subtle rounded-lg p-3 flex flex-col min-w-[120px]">
+<span class="font-label-sm text-on-surface-variant uppercase mb-1">Clarity Score</span>
+<div class="flex items-end gap-2">
+<span class="font-display text-[28px] leading-none text-score-warn">68</span>
+<span class="text-sm text-on-surface-variant pb-1">/100</span>
+</div>
+</div>
+<div class="bg-surface border border-border-subtle rounded-lg p-3 flex flex-col min-w-[120px]">
+<span class="font-label-sm text-on-surface-variant uppercase mb-1">Open Questions</span>
+<div class="flex items-end gap-2">
+<span class="font-display text-[28px] leading-none text-score-alert">4</span>
+<span class="text-sm text-on-surface-variant pb-1">critical</span>
+</div>
+</div>
+<div class="bg-surface border border-border-subtle rounded-lg p-3 flex flex-col min-w-[120px]">
+<span class="font-label-sm text-on-surface-variant uppercase mb-1">Tension Areas</span>
+<div class="flex items-end gap-2">
+<span class="font-display text-[28px] leading-none text-score-warn">2</span>
+<span class="text-sm text-on-surface-variant pb-1">conflicts</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Active Focus Card -->
+<div class="bg-surface border border-primary-fixed rounded-xl shadow-sm overflow-hidden flex flex-col">
+<div class="bg-primary-container/10 border-b border-primary-fixed px-6 py-4 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-3 h-3 rounded-full bg-node-pink"></div>
+<span class="font-label-md text-primary tracking-wide uppercase">Active Refinement: Technical Components</span>
+</div>
+<button class="text-primary hover:bg-primary-fixed rounded p-1"><span class="material-symbols-outlined">more_horiz</span></button>
+</div>
+<div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+<!-- Left: Question -->
+<div class="flex flex-col gap-4">
+<div>
+<h2 class="font-headline-md text-on-surface mb-2">Dépendances?</h2>
+<p class="font-body-md text-on-surface-variant">What external libraries or internal modules does this migration script depend on?</p>
+</div>
+<div class="bg-error-container/30 border border-error-container rounded-lg p-4 mt-auto">
+<div class="flex items-center gap-2 text-error font-label-md mb-2">
+<span class="material-symbols-outlined text-[18px]">warning</span>
+                            Critical Tension Detected
+                        </div>
+<p class="font-body-sm text-on-surface-variant text-sm">If depending on external APIs for data enrichment during migration, rate limits might break the script. Needs explicit handling.</p>
+</div>
+</div>
+<!-- Right: Resolution Area -->
+<div class="flex flex-col gap-4">
+<div class="flex-1 bg-surface-container-lowest border border-border-subtle rounded-lg p-4 flex flex-col gap-3 min-h-[160px] overflow-y-auto">
+<div class="flex justify-end">
+<div class="bg-primary-container text-on-primary rounded-lg rounded-tr-none p-3 max-w-[90%] shadow-sm">
+<p class="font-body-md text-body-md">It should only depend on standard python libraries and the `psycopg2` package.</p>
+</div>
+</div>
+<div class="flex justify-start mt-2">
+<div class="bg-surface-container text-on-surface rounded-lg rounded-tl-none p-3 max-w-[90%] border border-border-subtle">
+<p class="font-body-md text-body-md text-sm">Got it. What about `sqlalchemy` for ORM mapping, or are we using raw SQL via `psycopg2`?</p>
+</div>
+</div>
+</div>
+<div class="relative flex items-end gap-2">
+<textarea class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg focus:border-primary focus:ring-1 focus:ring-primary p-3 font-body-md text-body-md resize-none min-h-[80px]" placeholder="Resolve this dependency question..."></textarea>
+<div class="absolute bottom-3 right-3 flex gap-2">
+<button class="h-8 w-8 bg-surface-container text-on-surface-variant rounded hover:bg-surface-container-high transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">mic</span>
+</button>
+<button class="h-8 w-8 bg-primary text-on-primary rounded flex items-center justify-center hover:bg-primary-container transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[18px]">send</span>
+</button>
+</div>
+</div>
+<div class="flex gap-2">
+<span class="bg-surface-container-low border border-border-subtle text-on-surface-variant font-label-md text-label-md px-3 py-1.5 rounded-full cursor-pointer hover:bg-surface-variant transition-colors">Raw SQL</span>
+<span class="bg-surface-container-low border border-border-subtle text-on-surface-variant font-label-md text-label-md px-3 py-1.5 rounded-full cursor-pointer hover:bg-surface-variant transition-colors">SQLAlchemy</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Upcoming Decisions List -->
+<div class="flex flex-col gap-3 mt-4">
+<h3 class="font-label-md text-on-surface-variant uppercase tracking-wider mb-2">Next in Queue</h3>
+<div class="bg-surface border border-border-subtle rounded-lg p-4 flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer opacity-70">
+<div class="flex items-center gap-4">
+<div class="w-2 h-2 rounded-full bg-node-yellow"></div>
+<div>
+<h4 class="font-label-md text-on-surface text-base">Sécurité?</h4>
+<p class="font-body-md text-on-surface-variant text-sm">How are database credentials managed during execution?</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+</div>
+<div class="bg-surface border border-border-subtle rounded-lg p-4 flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer opacity-70">
+<div class="flex items-center gap-4">
+<div class="w-2 h-2 rounded-full bg-node-purple"></div>
+<div>
+<h4 class="font-label-md text-on-surface text-base">Infra concernée?</h4>
+<p class="font-body-md text-on-surface-variant text-sm">Which environments does this need to run in (Dev, Staging, Prod)?</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+</div>
+</div>
+</div>
+</main>
+<!-- ZONE 3: Deliverable (Right Tab/Side Panel) -->
+<aside class="w-[380px] bg-surface border-l border-border-subtle flex flex-col z-30 shadow-[-4px_0_12px_rgba(0,0,0,0.02)]">
+<!-- Tabs Header -->
+<div class="h-[48px] border-b border-border-subtle flex">
+<button class="flex-1 flex items-center justify-center gap-2 border-b-2 border-primary bg-primary/5 text-primary font-label-md">
+<span class="material-symbols-outlined text-[18px]">description</span>
+            Brief
+        </button>
+<button class="flex-1 flex items-center justify-center gap-2 border-b-2 border-transparent text-on-surface-variant hover:bg-surface-container-lowest font-label-md">
+<span class="material-symbols-outlined text-[18px]">view_timeline</span>
+            Plan
+        </button>
+<button class="flex-1 flex items-center justify-center gap-2 border-b-2 border-transparent text-on-surface-variant hover:bg-surface-container-lowest font-label-md">
+<span class="material-symbols-outlined text-[18px]">code</span>
+            Code Draft
+        </button>
+</div>
+<!-- Toolbar -->
+<div class="p-2 border-b border-border-subtle bg-surface-container-lowest flex items-center justify-between">
+<div class="flex items-center gap-1">
+<button class="p-1.5 text-on-surface-variant hover:bg-surface-container-low rounded"><span class="material-symbols-outlined text-[18px]">format_bold</span></button>
+<button class="p-1.5 text-on-surface-variant hover:bg-surface-container-low rounded"><span class="material-symbols-outlined text-[18px]">format_list_bulleted</span></button>
+<div class="w-px h-4 bg-border-subtle mx-1"></div>
+<button class="p-1.5 text-on-surface-variant hover:bg-surface-container-low rounded"><span class="material-symbols-outlined text-[18px]">content_copy</span></button>
+</div>
+<button class="px-3 py-1.5 bg-primary text-on-primary rounded text-sm font-label-md flex items-center gap-2 hover:bg-primary-container transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[16px]">play_arrow</span>
+            Generate
+        </button>
+</div>
+<!-- Editor Area -->
+<div class="flex-1 overflow-y-auto p-6 bg-surface-container-lowest font-body-md text-on-surface" contenteditable="true">
+<h1 class="text-2xl font-headline-md mb-4 text-on-surface border-b border-border-subtle pb-2">Migration Script Brief</h1>
+<h3 class="text-lg font-bold text-node-blue mt-6 mb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">subject</span>
+            1. Objective
+        </h3>
+<p class="mb-4 text-on-surface-variant leading-relaxed">Develop a robust Python script to migrate user data to the new database schema. The target database is PostgreSQL 15.</p>
+<h3 class="text-lg font-bold text-node-pink mt-6 mb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">build</span>
+            2. Technical Requirements
+        </h3>
+<ul class="list-disc pl-5 mb-4 text-on-surface-variant space-y-1">
+<li class="bg-primary/10 rounded px-2 py-1 -ml-2 border-l-4 border-primary">Dependencies: Limited to standard Python libraries and <code>psycopg2</code>. <em>(Finalizing ORM vs Raw SQL decision)</em></li>
+</ul>
+<h3 class="text-lg font-bold text-node-yellow mt-6 mb-2 flex items-center gap-2 opacity-50">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+            3. Security &amp; Ops (Pending)
+        </h3>
+<p class="mb-4 text-on-surface-variant italic opacity-50">Awaiting decisions on infrastructure environments and credentials management.</p>
+<div class="mt-8 p-4 bg-surface-container border border-dashed border-border-subtle rounded text-center">
+<p class="text-sm text-on-surface-variant italic">Document is live-updating as decisions are made.</p>
+</div>
+</div>
+</aside>
+</div>
+</body></html>

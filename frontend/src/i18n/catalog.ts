@@ -97,6 +97,13 @@ export const MESSAGES: Record<string, [en: string, fr: string]> = {
   "azure.projects_failed": ["Unable to list the projects.", "Impossible de lister les projets."],
   "azure.test_failed": ["Azure DevOps test failed.", "Le test Azure DevOps a échoué."],
   // --- refinement home -----------------------------------------------------
+  "home.heading": ["Refine Your Intent", "Affine ton idée"],
+  "home.subheading": [
+    "From a vague idea to an actionable subject in 15 minutes",
+    "Passe d'une idée floue à un sujet exploitable en 15 minutes",
+  ],
+  "home.search_section": ["Find work item", "Recherche work item"],
+  "home.context_section": ["Extra context", "Contexte bonus"],
   "home.eyebrow": ["Selection", "Sélection"],
   "home.title": ["Pick a work item", "Choisir un work item"],
   "home.subtitle": [
@@ -107,10 +114,11 @@ export const MESSAGES: Record<string, [en: string, fr: string]> = {
   ],
   "home.search_label": ["Search a ticket", "Recherche ticket"],
   "home.search_placeholder": [
-    "e.g. database Playwright API, or a work item id",
-    "Ex : database Playwright API, ou un id de work item",
+    "e.g., 'Set up user secrets management (KV)'",
+    "Ex : 'Mettre en place du gardien des secrets (KV) utilisateurs'",
   ],
   "home.search_button": ["Search", "Chercher"],
+  "home.refine_context": ["Refinement context", "Contexte de refinement"],
   "home.extra_context": ["Extra context", "Contexte bonus"],
   "home.extra_context_placeholder": [
     "Add what the team already knows, informal notes, suspected impacts, or angles worth digging into.",

@@ -1,9 +1,9 @@
 import { useI18n } from "../i18n";
 import type { SessionSummaryModel } from "../types/api";
 
-const NEUTRAL_ITEM = "rounded-lg border border-slate-800 bg-slate-950/60 p-3";
-const AMBER_ITEM = "rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-amber-100";
-const ROSE_ITEM = "rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-rose-100";
+const NEUTRAL_ITEM = "rounded-lg border border-border-subtle bg-surface-container-low p-3";
+const AMBER_ITEM = "rounded-lg border border-accent-yellow/30 bg-accent-yellow/10 p-3 text-on-surface-variant";
+const ROSE_ITEM = "rounded-lg border border-error/20 bg-error-container/50 p-3 text-error";
 
 function SummaryList({
   title,
@@ -18,8 +18,8 @@ function SummaryList({
 }) {
   return (
     <div>
-      <p className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">{title}</p>
-      <ul className="space-y-2 text-slate-300">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">{title}</p>
+      <ul className="space-y-2 text-sm">
         {items.length > 0 ? (
           items.map((item, index) => (
             <li key={index} className={itemClass}>
@@ -27,7 +27,7 @@ function SummaryList({
             </li>
           ))
         ) : (
-          <li className="text-slate-500">{emptyText}</li>
+          <li className="text-outline">{emptyText}</li>
         )}
       </ul>
     </div>
@@ -38,23 +38,23 @@ export default function SessionSummaryPanel({ summary }: { summary: SessionSumma
   const { t, label } = useI18n();
 
   return (
-    <aside className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <aside className="rounded-xl border border-border-subtle bg-surface-container-lowest p-6 shadow-sm">
       <div className="mb-5 flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm text-violet-300">{t("summary.eyebrow")}</p>
-          <h4 className="text-xl font-semibold tracking-tight">{t("summary.title")}</h4>
+          <p className="text-xs font-semibold uppercase tracking-wider text-primary">{t("summary.eyebrow")}</p>
+          <h4 className="font-headline-md text-headline-md text-on-surface">{t("summary.title")}</h4>
         </div>
-        <span className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs text-slate-300">
+        <span className="rounded-full border border-border-subtle bg-surface-container-low px-3 py-1 text-xs font-medium text-on-surface-variant">
           {label("confidence", summary.confidence)}
         </span>
       </div>
 
       <div className="space-y-4 text-sm">
         <div>
-          <p className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
             {t("summary.reason")}
           </p>
-          <p className="text-slate-300">{summary.reason}</p>
+          <p className="text-on-surface-variant">{summary.reason}</p>
         </div>
 
         <SummaryList title={t("summary.facts")} items={summary.facts} emptyText={t("summary.no_facts")} />

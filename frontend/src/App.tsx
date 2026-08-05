@@ -11,9 +11,9 @@ export default function App() {
     <LanguageProvider>
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={<RefinementHome />} />
+          <Route path="/refinement" element={<RefinementHome />} />
           <Route element={<Layout />}>
-            <Route path="/" element={<Navigate to="/refinement" replace />} />
-            <Route path="/refinement" element={<RefinementHome />} />
             <Route path="/refinement/sessions/:sessionId" element={<SessionPage />} />
             <Route path="/refinement/sessions/:sessionId/result" element={<SessionResultPage />} />
             <Route path="/settings" element={<SettingsPage />} />

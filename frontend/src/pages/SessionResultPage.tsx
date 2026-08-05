@@ -34,44 +34,44 @@ export default function SessionResultPage() {
 
   if (loadError) {
     return (
-      <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">
+      <div className="rounded-lg border border-error/30 bg-error-container/50 p-4 text-sm text-error">
         {loadError}
       </div>
     );
   }
 
   if (!detail) {
-    return <p className="text-sm text-slate-400">{t("common.loading")}</p>;
+    return <p className="text-sm text-on-surface-variant">{t("common.loading")}</p>;
   }
 
   return (
     <>
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm text-violet-300">{t("result.eyebrow")}</p>
-          <h3 className="text-2xl font-semibold tracking-tight">Session {detail.session.id}</h3>
+          <p className="text-xs font-semibold uppercase tracking-wider text-primary">{t("result.eyebrow")}</p>
+          <h3 className="font-headline-lg text-headline-lg text-on-surface">Session {detail.session.id}</h3>
         </div>
         <div className="flex gap-3">
           <Link
             to={`/refinement/sessions/${detail.session.id}`}
-            className="rounded-xl border border-slate-700 px-4 py-3 text-sm text-slate-200 hover:bg-slate-800"
+            className="rounded-lg border border-border-subtle px-4 py-3 text-sm font-medium text-on-surface-variant hover:bg-surface-container-low transition-colors no-underline"
           >
             {t("result.back")}
           </Link>
           <a
             href={exportUrl(detail.session.id)}
-            className="rounded-xl bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950 hover:bg-emerald-400"
+            className="rounded-lg bg-primary-container text-on-primary px-4 py-3 text-sm font-semibold hover:opacity-90 transition-colors no-underline"
           >
             {t("session.export_markdown")}
           </a>
         </div>
       </div>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+      <section className="rounded-xl border border-border-subtle bg-surface-container-lowest p-6 shadow-sm">
         {detail.finalArtifact ? (
           <ArtifactView artifact={detail.finalArtifact} />
         ) : (
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-100">
+          <div className="rounded-lg border border-accent-yellow/30 bg-accent-yellow/10 p-4 text-sm text-on-surface-variant">
             {t("result.not_available")}
           </div>
         )}

@@ -2,12 +2,120 @@
 @plugin "@tailwindcss/forms";
 @plugin "@tailwindcss/typography";
 
-body {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+@theme {
+  --color-on-tertiary-fixed-variant: #773200;
+  --color-secondary-fixed-dim: #cbbeff;
+  --color-surface-bright: #f7f9ff;
+  --color-on-tertiary: #ffffff;
+  --color-on-primary-container: #c0c9ff;
+  --color-secondary-container: #795bec;
+  --color-on-secondary-fixed: #1d0061;
+  --color-on-primary-fixed: #001258;
+  --color-on-secondary-fixed-variant: #4a22bb;
+  --color-surface-variant: #e0e3e8;
+  --color-secondary: #603fd1;
+  --color-inverse-surface: #2d3135;
+  --color-on-surface-variant: #444653;
+  --color-inverse-on-surface: #eef1f6;
+  --color-on-error: #ffffff;
+  --color-border-subtle: #E9ECEF;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f1f4f9;
+  --color-tertiary-container: #903e00;
+  --color-on-secondary: #ffffff;
+  --color-tertiary-fixed: #ffdbca;
+  --color-surface-dim: #d7dadf;
+  --color-surface-container-high: #e5e8ee;
+  --color-on-primary: #ffffff;
+  --color-surface: #f7f9ff;
+  --color-on-primary-fixed-variant: #213ba7;
+  --color-primary: #16329f;
+  --color-secondary-fixed: #e6deff;
+  --color-primary-container: #344cb7;
+  --color-error-container: #ffdad6;
+  --color-tertiary: #6b2c00;
+  --color-primary-fixed: #dee1ff;
+  --color-outline: #757684;
+  --color-accent-yellow: #FFD32D;
+  --color-on-error-container: #93000a;
+  --color-on-secondary-container: #fffbff;
+  --color-tertiary-fixed-dim: #ffb68f;
+  --color-on-tertiary-container: #ffbe9c;
+  --color-inverse-primary: #b9c3ff;
+  --color-on-tertiary-fixed: #331100;
+  --color-error: #ba1a1a;
+  --color-canvas-bg: #F8F9FA;
+  --color-background: #f7f9ff;
+  --color-surface-container: #ebeef3;
+  --color-outline-variant: #c5c5d5;
+  --color-surface-container-highest: #e0e3e8;
+  --color-primary-fixed-dim: #b9c3ff;
+  --color-surface-tint: #3d55c0;
+  --color-on-surface: #181c20;
+  --color-on-background: #181c20;
+
+  --radius-DEFAULT: 0.125rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.5rem;
+  --radius-full: 0.75rem;
+
+  --spacing-margin-desktop: 24px;
+  --spacing-margin-mobile: 16px;
+  --spacing-toolbar-height: 48px;
+  --spacing-unit: 4px;
+  --spacing-panel-width: 280px;
+  --spacing-gutter: 16px;
+
+  --font-headline-md: "Hanken Grotesk", sans-serif;
+  --font-body-md: "Nunito Sans", sans-serif;
+  --font-label-sm: "Nunito Sans", sans-serif;
+  --font-label-md: "Nunito Sans", sans-serif;
+  --font-body-lg: "Nunito Sans", sans-serif;
+  --font-headline-lg: "Hanken Grotesk", sans-serif;
+  --font-display: "Hanken Grotesk", sans-serif;
+
+  --text-headline-md: 20px;
+  --text-headline-md--line-height: 28px;
+  --text-headline-md--font-weight: 600;
+  --text-body-md: 14px;
+  --text-body-md--line-height: 20px;
+  --text-body-md--font-weight: 400;
+  --text-label-sm: 11px;
+  --text-label-sm--line-height: 14px;
+  --text-label-sm--letter-spacing: 0.03em;
+  --text-label-sm--font-weight: 700;
+  --text-label-md: 12px;
+  --text-label-md--line-height: 16px;
+  --text-label-md--letter-spacing: 0.01em;
+  --text-label-md--font-weight: 600;
+  --text-body-lg: 16px;
+  --text-body-lg--line-height: 24px;
+  --text-body-lg--font-weight: 400;
+  --text-headline-lg: 28px;
+  --text-headline-lg--line-height: 36px;
+  --text-headline-lg--font-weight: 600;
+  --text-display: 40px;
+  --text-display--line-height: 48px;
+  --text-display--letter-spacing: -0.02em;
+  --text-display--font-weight: 700;
 }
 
-textarea,
-input,
-button {
-  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+body {
+  background-color: var(--color-canvas-bg);
+  color: var(--color-on-surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.textarea-focus-ring:focus-within {
+  box-shadow: 0 0 0 2px var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.canvas-grid {
+  background-image:
+    linear-gradient(to right, var(--color-border-subtle) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-border-subtle) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: center top;
 }
