@@ -1,49 +1,37 @@
-Use the system instructions and the provided `RefinementContext`.
+# Task — Generate the next question round
 
-Task:
-
-Generate the next best question round for a backlog refinement session.
+Use the system instructions and the provided context (subject, active `grid`,
+`grid_axes`, extra context, previous facts/assumptions/unknowns/answers).
 
 Objectives:
 
-- reduce ambiguity quickly
-- avoid redundant questions
-- prioritize questions that impact implementation split, CI/CD, tests, data, or delivery risk
-- ask at most `maxQuestionsPerRound` questions
+- reduce ambiguity on this subject quickly
+- draw questions from the axes of the active grid (`grid_axes`)
+- avoid questions already answered or already implied by known facts
+- ask at most `max_questions_per_round` questions
 
 Instructions:
 
-1. Review the work item, extra context, derived facts, assumptions, unknowns, dependencies, and risks.
-2. Identify the highest-value missing information.
-3. Produce grouped questions with a theme and a brief reason for each.
-4. If context is already sufficient for a final refinement, set `stopCriteria` to `true` and keep the question list minimal.
-5. Do not ask vague questions such as "Any other constraints?" unless you can narrow them down to a delivery-relevant area.
+1. Pick the highest-value axes to clarify given what is still unknown.
+2. Produce one focused question per axis, each with a short `why`.
+3. Set `theme` to the axis label it addresses.
+4. Set `priority` to `high`, `medium`, or `low`.
+5. If context is already sufficient to write the deliverable, set `stopCriteria=true`
+   and keep the list minimal.
+6. Avoid vague questions ("anything else?"). Each question targets one uncertainty and
+   is answerable by the team.
 
-Output format:
+Return strict JSON only:
 
-- Return JSON only.
-- Follow the `generate-questions.schema.json` schema exactly.
-
-Question quality rules:
-
-- Each question must target one uncertainty.
-- Each question must be answerable by an engineering or product team.
-- Each question should help define scope, ownership, sequencing, migration, validation, or rollback.
-- Prefer specific wording such as:
-  - what datasets are in scope
-  - which pipelines will break
-  - who owns a migration step
-  - how non-regression will be validated
-  - whether mobile and web share the same provisioning logic
-
-Bad question examples:
-
-- Can you provide more details?
-- Are there any impacts?
-- Is there anything else to consider?
-
-Good question examples:
-
-- Which existing Playwright suites still rely on the shared E2E main database?
-- Is the dataset duplication expected to be one-time or continuously synchronized?
-- Which CI/CD pipelines currently inject the shared `datasetLabel`, and do mobile jobs reuse the same configuration?
+```
+{
+  "questions": [
+    {"id": "q1", "theme": "<axis label>", "priority": "high|medium|low",
+     "question": "<question>", "why": "<why it matters>"}
+  ],
+  "reasoningSummary": "<short summary>",
+  "potentialRisks": ["..."],
+  "missingAreas": ["..."],
+  "stopCriteria": false
+}
+```

@@ -1,187 +1,71 @@
-import { useI18n } from "../i18n";
-import type { FinalRefinementModel } from "../types/api";
+import type { RefinementDeliverable } from "../types/api";
 
-const NEUTRAL_ITEM = "rounded-lg border border-border-subtle bg-surface-container-low p-3";
-const NESTED_ITEM = "rounded-lg border border-border-subtle bg-white p-3";
-const AMBER_ITEM = "rounded-lg border border-accent-yellow/30 bg-accent-yellow/10 p-3 text-on-surface-variant";
-
-function ItemList({
-  items,
-  emptyText,
-  itemClass = NEUTRAL_ITEM,
-}: {
-  items: string[];
-  emptyText?: string;
-  itemClass?: string;
-}) {
+function ItemList({ items }: { items: string[] }) {
+  if (!items || items.length === 0) {
+    return <p className="text-sm italic text-outline">—</p>;
+  }
   return (
-    <ul className="space-y-2 text-sm text-on-surface-variant">
-      {items.length > 0
-        ? items.map((item, index) => (
-            <li key={index} className={itemClass}>
-              {item}
-            </li>
-          ))
-        : emptyText && <li className="text-outline text-sm">{emptyText}</li>}
+    <ul className="list-disc space-y-1 pl-5 text-sm text-on-surface-variant">
+      {items.map((item, index) => (
+        <li key={index}>{item}</li>
+      ))}
     </ul>
   );
 }
 
-const CONCERN_KEYS = ["testing", "cicd", "infra", "data", "security", "observability"] as const;
-
-export default function ArtifactView({ artifact }: { artifact: FinalRefinementModel }) {
-  const { t } = useI18n();
-
+export default function ArtifactView({ deliverable }: { deliverable: RefinementDeliverable }) {
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-          {t("artifact.summary")}
-        </p>
-        <p className="text-sm leading-6 text-on-surface">{artifact.summary}</p>
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-            {t("artifact.in_scope")}
-          </p>
-          <ItemList items={artifact.scope.inScope ?? []} />
-        </div>
-        <div className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-            {t("artifact.out_of_scope")}
-          </p>
-          <ItemList items={artifact.scope.outOfScope ?? []} />
-        </div>
-      </section>
+      {deliverable.summary && (
+        <section className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">Résumé</p>
+          <p className="text-sm leading-6 text-on-surface">{deliverable.summary}</p>
+        </section>
+      )}
 
       <section className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
-        <div className="mb-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-outline">
-            {t("artifact.proposed_split")}
-          </p>
-          <h5 className="text-lg font-semibold text-on-surface">
-            {t("artifact.story_count", { count: artifact.proposedSplit.storyCount })}
-          </h5>
-        </div>
-        <p className="mb-4 text-sm text-on-surface-variant">{artifact.proposedSplit.rationale}</p>
+        <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-outline">Brief</p>
         <div className="space-y-4">
-          {artifact.proposedSplit.stories.map((story, index) => (
-            <article key={index} className="rounded-lg border border-border-subtle bg-surface-container-lowest p-5">
-              <h6 className="text-base font-semibold text-on-surface">
-                {index + 1}. {story.title}
-              </h6>
-              <p className="mt-2 text-sm text-on-surface-variant">{story.goal}</p>
-
-              <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-                    {t("artifact.acceptance_criteria")}
-                  </p>
-                  <ItemList items={story.acceptanceCriteria} itemClass={NESTED_ITEM} />
-                </div>
-                <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-                    {t("artifact.technical_notes")}
-                  </p>
-                  <ItemList
-                    items={story.technicalNotes}
-                    emptyText={t("artifact.no_technical_notes")}
-                    itemClass={NESTED_ITEM}
-                  />
-                </div>
-                <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-                    {t("artifact.dependencies")}
-                  </p>
-                  <ItemList
-                    items={story.dependencies}
-                    emptyText={t("artifact.no_dependencies")}
-                    itemClass={NESTED_ITEM}
-                  />
-                </div>
-                <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-                    {t("artifact.risks")}
-                  </p>
-                  <ItemList
-                    items={story.risks}
-                    emptyText={t("artifact.no_risks")}
-                    itemClass={NESTED_ITEM}
-                  />
-                </div>
-              </div>
-            </article>
+          {deliverable.brief.map((section, index) => (
+            <div key={index}>
+              <p className="mb-2 text-base font-semibold text-on-surface">{section.heading}</p>
+              <ItemList items={section.items} />
+            </div>
           ))}
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-2">
-        <div className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-            {t("artifact.known_facts")}
-          </p>
-          <ItemList items={artifact.knownFacts} emptyText={t("artifact.no_known_facts")} />
-        </div>
-        <div className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-            {t("artifact.assumptions")}
-          </p>
-          <ItemList items={artifact.assumptions} emptyText={t("artifact.no_assumptions")} />
-        </div>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-2">
-        <div className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-            {t("artifact.cross_cutting")}
-          </p>
-          <div className="space-y-4">
-            {CONCERN_KEYS.map((concern) => (
-              <div key={concern}>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-                  {t(`artifact.concern.${concern}`)}
+      {deliverable.plan.length > 0 && (
+        <section className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-outline">Plan</p>
+          <ol className="space-y-2">
+            {deliverable.plan.map((step, index) => (
+              <li key={index} className="rounded-lg border border-border-subtle bg-surface-container-lowest p-3">
+                <p className="text-sm font-semibold text-on-surface">
+                  {index + 1}. {step.title}
                 </p>
-                <ItemList
-                  items={artifact.crossCuttingConcerns[concern]}
-                  emptyText={t("artifact.no_item")}
-                />
-              </div>
+                {step.detail && <p className="mt-1 text-sm text-on-surface-variant">{step.detail}</p>}
+              </li>
             ))}
-          </div>
-        </div>
+          </ol>
+        </section>
+      )}
 
-        <div className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-            {t("artifact.delivery_plan")}
-          </p>
-          <div className="space-y-4">
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-                {t("artifact.recommended_order")}
-              </p>
-              <ItemList items={artifact.deliveryPlan.recommendedOrder} />
-            </div>
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-                {t("artifact.milestones")}
-              </p>
-              <ItemList items={artifact.deliveryPlan.milestones} />
-            </div>
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
-                {t("artifact.open_questions")}
-              </p>
-              <ItemList
-                items={artifact.openQuestions}
-                emptyText={t("artifact.no_open_questions")}
-                itemClass={AMBER_ITEM}
-              />
-            </div>
-          </div>
-        </div>
-      </section>
+      {deliverable.codeDraft && (
+        <section className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-outline">Code Draft</p>
+          <pre className="overflow-x-auto rounded-lg border border-border-subtle bg-surface-container p-4 text-xs text-on-surface">
+            <code>{deliverable.codeDraft}</code>
+          </pre>
+        </section>
+      )}
+
+      {deliverable.openQuestions.length > 0 && (
+        <section className="rounded-lg border border-accent-yellow/30 bg-accent-yellow/10 p-5">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">Questions ouvertes</p>
+          <ItemList items={deliverable.openQuestions} />
+        </section>
+      )}
     </div>
   );
 }

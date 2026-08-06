@@ -31,10 +31,9 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1-mini"
 
-    azure_devops_org: str = ""
-    azure_devops_project: str = ""
-    azure_devops_pat: str = ""
-    azure_devops_mock_mode: bool = True
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-chat"
+    deepseek_endpoint: str = "https://api.deepseek.com"
 
     refinement_max_rounds: int = 3
     refinement_max_questions_per_round: int = 6

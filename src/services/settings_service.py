@@ -2,13 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import httpx
 from sqlalchemy.orm import Session
 
 from src.api.schemas_settings import (
-    AzureDevOpsProjectModel,
-    AzureDevOpsProjectsResponse,
-    AzureDevOpsSettingsModel,
     ConnectionTestRequest,
     ConnectionTestResponse,
     LlmSettingsModel,
@@ -20,13 +16,6 @@ from src.config.settings import settings
 from src.i18n import t
 from src.models.app_settings import SENSITIVE_SETTING_KEYS, SettingCategories, SettingKeys
 from src.repositories.settings_repository import SettingsRepository
-from src.services.azure_devops_refinement import (
-    AzureDevOpsError,
-    build_auth_headers,
-    fetch_projects,
-    normalize_org_url,
-    read_json_response,
-)
 from src.utils.encryption import decrypt_value, encrypt_value
 
 
@@ -34,12 +23,6 @@ def _mask_secret(value: str | None) -> str | None:
     if not value:
         return None
     return f"****{value[-4:]}" if len(value) >= 4 else "****"
-
-
-def _bool_from_string(value: str | None, default: bool) -> bool:
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 @dataclass
@@ -52,17 +35,8 @@ class LlmRuntimeConfig:
 
 
 @dataclass
-class AzureDevOpsRuntimeConfig:
-    org_url: str
-    project: str
-    pat: str
-    mock_mode: bool
-
-
-@dataclass
 class RuntimeConfig:
     llm: LlmRuntimeConfig
-    azure_devops: AzureDevOpsRuntimeConfig
 
 
 class SettingsService:
@@ -82,14 +56,6 @@ class SettingsService:
                 keyHint=_mask_secret(runtime.llm.api_key),
                 source=self._source_for(SettingKeys.LLM_PROVIDER, fallback="environment"),
             ),
-            azureDevOps=AzureDevOpsSettingsModel(
-                orgUrl=runtime.azure_devops.org_url,
-                project=runtime.azure_devops.project,
-                mockMode=runtime.azure_devops.mock_mode,
-                patConfigured=bool(runtime.azure_devops.pat),
-                patHint=_mask_secret(runtime.azure_devops.pat),
-                source=self._source_for(SettingKeys.ADO_ORG_URL, fallback="environment"),
-            ),
         )
 
     def save_settings(self, payload: SaveSettingsRequest) -> SaveSettingsResponse:
@@ -97,14 +63,9 @@ class SettingsService:
         self._save_plain(SettingKeys.LLM_ENDPOINT, payload.llmEndpoint, SettingCategories.LLM)
         self._save_plain(SettingKeys.LLM_DEPLOYMENT, payload.llmDeployment, SettingCategories.LLM)
         self._save_plain(SettingKeys.LLM_MODEL, payload.llmModel, SettingCategories.LLM)
-        self._save_plain(SettingKeys.ADO_ORG_URL, payload.adoOrgUrl, SettingCategories.AZURE_DEVOPS)
-        self._save_plain(SettingKeys.ADO_PROJECT, payload.adoProject, SettingCategories.AZURE_DEVOPS)
-        self._save_plain(SettingKeys.ADO_MOCK_MODE, "true" if payload.adoMockMode else "false", SettingCategories.AZURE_DEVOPS)
 
         if payload.llmApiKey.strip():
             self._save_secret(SettingKeys.LLM_API_KEY, payload.llmApiKey.strip(), SettingCategories.LLM)
-        if payload.adoPat.strip():
-            self._save_secret(SettingKeys.ADO_PAT, payload.adoPat.strip(), SettingCategories.AZURE_DEVOPS)
 
         return SaveSettingsResponse(
             success=True,
@@ -113,98 +74,27 @@ class SettingsService:
         )
 
     def get_runtime_config(self) -> RuntimeConfig:
+        provider = self._get_setting_value(SettingKeys.LLM_PROVIDER, settings.llm_provider or "mock") or "mock"
+
+        # Env fallbacks depend on the provider, so setting only the provider + its key
+        # in the .env is enough — no UI save required.
+        if provider == "deepseek":
+            key_fallback = settings.deepseek_api_key
+            model_fallback = settings.deepseek_model
+            endpoint_fallback = settings.deepseek_endpoint
+        else:
+            key_fallback = settings.azure_ai_key or settings.openai_api_key
+            model_fallback = settings.openai_model
+            endpoint_fallback = settings.azure_ai_endpoint
+
         return RuntimeConfig(
             llm=LlmRuntimeConfig(
-                provider=self._get_setting_value(SettingKeys.LLM_PROVIDER, settings.llm_provider or "mock") or "mock",
-                endpoint=self._get_setting_value(SettingKeys.LLM_ENDPOINT, settings.azure_ai_endpoint),
-                api_key=self._get_secret_value(SettingKeys.LLM_API_KEY, settings.azure_ai_key or settings.openai_api_key),
+                provider=provider,
+                endpoint=self._get_setting_value(SettingKeys.LLM_ENDPOINT, endpoint_fallback),
+                api_key=self._get_secret_value(SettingKeys.LLM_API_KEY, key_fallback),
                 deployment=self._get_setting_value(SettingKeys.LLM_DEPLOYMENT, settings.azure_ai_model_id),
-                model=self._get_setting_value(SettingKeys.LLM_MODEL, settings.openai_model),
+                model=self._get_setting_value(SettingKeys.LLM_MODEL, model_fallback),
             ),
-            azure_devops=AzureDevOpsRuntimeConfig(
-                org_url=self._get_setting_value(SettingKeys.ADO_ORG_URL, settings.azure_devops_org),
-                project=self._get_setting_value(SettingKeys.ADO_PROJECT, settings.azure_devops_project),
-                pat=self._get_secret_value(SettingKeys.ADO_PAT, settings.azure_devops_pat),
-                mock_mode=_bool_from_string(
-                    self.repository.get(SettingKeys.ADO_MOCK_MODE),
-                    settings.azure_devops_mock_mode,
-                ),
-            ),
-        )
-
-    def test_azure_devops(self, payload: ConnectionTestRequest | None = None) -> ConnectionTestResponse:
-        runtime = self.get_runtime_config()
-        org_url = (payload.orgUrl if payload and payload.orgUrl is not None else runtime.azure_devops.org_url).strip()
-        project = (payload.project if payload and payload.project is not None else runtime.azure_devops.project).strip()
-        pat = (payload.pat if payload and payload.pat is not None and payload.pat.strip() else runtime.azure_devops.pat)
-        mock_mode = payload.mockMode if payload and payload.mockMode is not None else runtime.azure_devops.mock_mode
-
-        if mock_mode:
-            return ConnectionTestResponse(
-                success=True,
-                message=t("api.mock_mode_on"),
-                details={"mockMode": True},
-            )
-
-        if not org_url:
-            return ConnectionTestResponse(success=False, message=t("api.org_url_missing"))
-        if not project:
-            return ConnectionTestResponse(success=False, message=t("api.project_missing"))
-        if not pat:
-            return ConnectionTestResponse(success=False, message=t("api.pat_missing"))
-
-        url = f"{normalize_org_url(org_url)}/_apis/projects?api-version=7.0&$top=200"
-        try:
-            with httpx.Client(timeout=15.0) as client:
-                response = client.get(url, headers=build_auth_headers(pat))
-            data = read_json_response(response, t("ado.ctx.connection"))
-        except AzureDevOpsError as exc:
-            return ConnectionTestResponse(success=False, message=str(exc))
-        except Exception as exc:
-            return ConnectionTestResponse(success=False, message=t("api.ado_failed", error=exc))
-
-        names = [item.get("name", "") for item in data.get("value", [])]
-        if project not in names:
-            return ConnectionTestResponse(
-                success=False,
-                message=t("api.ado_project_invisible", project=project),
-                details={"projectsVisible": len(names)},
-            )
-
-        return ConnectionTestResponse(
-            success=True,
-            message=t("api.ado_ok", project=project),
-            details={"projectsVisible": len(names)},
-        )
-
-    async def list_azure_devops_projects(
-        self, payload: ConnectionTestRequest | None = None
-    ) -> AzureDevOpsProjectsResponse:
-        runtime = self.get_runtime_config()
-        org_url = (payload.orgUrl if payload and payload.orgUrl is not None else runtime.azure_devops.org_url).strip()
-        pat = payload.pat if payload and payload.pat is not None and payload.pat.strip() else runtime.azure_devops.pat
-
-        # Mock mode only changes where work items come from: as soon as an org URL
-        # and a PAT exist, list the real projects so the field can be configured.
-        if not org_url or not pat:
-            return AzureDevOpsProjectsResponse(
-                success=False,
-                message=t("api.org_url_hint") if not org_url else t("api.pat_hint"),
-                projects=[AzureDevOpsProjectModel(id="mock", name="MockProject")],
-            )
-
-        try:
-            projects = await fetch_projects(org_url, pat)
-        except AzureDevOpsError as exc:
-            return AzureDevOpsProjectsResponse(success=False, message=str(exc))
-        except Exception as exc:
-            return AzureDevOpsProjectsResponse(success=False, message=t("api.projects_failed", error=exc))
-
-        projects.sort(key=lambda item: item["name"].lower())
-        return AzureDevOpsProjectsResponse(
-            success=True,
-            message=t("api.projects_found", count=len(projects)),
-            projects=[AzureDevOpsProjectModel(**project) for project in projects],
         )
 
     def test_llm(self, payload: ConnectionTestRequest | None = None) -> ConnectionTestResponse:
@@ -222,7 +112,7 @@ class SettingsService:
                 details={"provider": provider},
             )
 
-        if provider in {"azure-foundry", "azure-openai", "openai", "openrouter"}:
+        if provider in {"azure-foundry", "azure-openai", "openai", "openrouter", "deepseek"}:
             missing = []
             if not api_key:
                 missing.append(t("api.field.api_key"))
@@ -230,7 +120,7 @@ class SettingsService:
                 missing.append(t("api.field.endpoint"))
             if provider in {"azure-foundry", "azure-openai"} and not deployment:
                 missing.append(t("api.field.deployment"))
-            if provider in {"openai", "openrouter"} and not model:
+            if provider in {"openai", "openrouter", "deepseek"} and not model:
                 missing.append(t("api.field.model"))
 
             if missing:

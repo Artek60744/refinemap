@@ -1,10 +1,11 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import { LanguageProvider } from "./i18n";
+import ChooseGrid from "./pages/ChooseGrid";
 import RefinementHome from "./pages/RefinementHome";
-import SessionPage from "./pages/SessionPage";
 import SessionResultPage from "./pages/SessionResultPage";
 import SettingsPage from "./pages/SettingsPage";
+import WarRoom from "./pages/WarRoom";
 
 export default function App() {
   return (
@@ -13,8 +14,9 @@ export default function App() {
         <Routes>
           <Route path="/" element={<RefinementHome />} />
           <Route path="/refinement" element={<RefinementHome />} />
+          <Route path="/refinement/choose" element={<ChooseGrid />} />
+          <Route path="/refinement/sessions/:sessionId" element={<WarRoom />} />
           <Route element={<Layout />}>
-            <Route path="/refinement/sessions/:sessionId" element={<SessionPage />} />
             <Route path="/refinement/sessions/:sessionId/result" element={<SessionResultPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/refinement" replace />} />

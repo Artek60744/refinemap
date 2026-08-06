@@ -7,7 +7,7 @@ from src.models.refinement import (
     SessionArtifact,
     SessionSummary,
     User,
-    WorkItemSnapshot,
+    SubjectSnapshot,
 )
 
 __all__ = [
@@ -18,6 +18,6 @@ __all__ = [
     "RefinementSession",
     "SessionArtifact",
     "SessionSummary",
+    "SubjectSnapshot",
     "User",
-    "WorkItemSnapshot",
 ]

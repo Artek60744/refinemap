@@ -65,5 +65,4 @@ async def health() -> dict[str, str]:
     return {
         "status": "ok",
         "llm_provider": runtime.llm.provider,
-        "azure_devops_mode": "mock" if runtime.azure_devops.mock_mode else "live",
     }

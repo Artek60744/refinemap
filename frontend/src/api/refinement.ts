@@ -1,9 +1,8 @@
 import { apiFetch } from "./client";
 import type {
   CreateSessionRequest,
-  GetWorkItemResponse,
-  SearchWorkItemsResponse,
   SessionDetailResponse,
+  SetModeRequest,
   StartSessionResponse,
   SubmitAnswersRequest,
   SubmitAnswersResponse,
@@ -11,20 +10,22 @@ import type {
 
 const BASE = "/api/refinement";
 
-export function searchWorkItems(query: string, limit = 10): Promise<SearchWorkItemsResponse> {
-  return apiFetch(`${BASE}/work-items/search?q=${encodeURIComponent(query)}&limit=${limit}`);
-}
-
-export function getWorkItem(workItemId: string): Promise<GetWorkItemResponse> {
-  return apiFetch(`${BASE}/work-items/${encodeURIComponent(workItemId)}`);
-}
-
 export function createSession(payload: CreateSessionRequest): Promise<StartSessionResponse> {
   return apiFetch(`${BASE}/sessions`, { method: "POST", body: JSON.stringify(payload) });
 }
 
 export function getSession(sessionId: string): Promise<SessionDetailResponse> {
   return apiFetch(`${BASE}/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+export function setSessionMode(
+  sessionId: string,
+  payload: SetModeRequest,
+): Promise<SessionDetailResponse> {
+  return apiFetch(`${BASE}/sessions/${encodeURIComponent(sessionId)}/mode`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function submitAnswers(

@@ -9,36 +9,19 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class WorkItemRelation(StrictModel):
-    type: str
-    targetId: str | None = None
-    url: str | None = None
+# --- subject ---------------------------------------------------------------
 
 
-class WorkItemSearchItem(StrictModel):
+class SubjectModel(StrictModel):
     id: str
-    type: str
     title: str
-    state: str | None = None
-    tags: list[str] = Field(default_factory=list)
-    areaPath: str | None = None
-    iterationPath: str | None = None
+    description: str = ""
+    mode: str = "auto"
+    grid: str = "po"
+    notes: str = ""
 
 
-class WorkItemDetail(WorkItemSearchItem):
-    url: str | None = None
-    description: str | None = None
-    acceptanceCriteria: str | None = None
-    priority: int | None = None
-    relations: list[WorkItemRelation] = Field(default_factory=list)
-
-
-class SearchWorkItemsResponse(StrictModel):
-    items: list[WorkItemSearchItem]
-
-
-class GetWorkItemResponse(StrictModel):
-    workItem: WorkItemDetail
+# --- questions & summary ---------------------------------------------------
 
 
 class QuestionItem(StrictModel):
@@ -66,44 +49,28 @@ class SessionSummaryModel(StrictModel):
     reason: str = ""
 
 
-class StoryModel(StrictModel):
+# --- deliverable (Brief / Plan / Code Draft) -------------------------------
+
+
+class BriefSection(StrictModel):
+    heading: str
+    items: list[str] = Field(default_factory=list)
+
+
+class PlanStep(StrictModel):
     title: str
-    goal: str
-    acceptanceCriteria: list[str] = Field(default_factory=list)
-    technicalNotes: list[str] = Field(default_factory=list)
-    dependencies: list[str] = Field(default_factory=list)
-    risks: list[str] = Field(default_factory=list)
+    detail: str = ""
 
 
-class ProposedSplitModel(StrictModel):
-    storyCount: int
-    rationale: str
-    stories: list[StoryModel] = Field(default_factory=list)
-
-
-class CrossCuttingConcernsModel(StrictModel):
-    testing: list[str] = Field(default_factory=list)
-    cicd: list[str] = Field(default_factory=list)
-    infra: list[str] = Field(default_factory=list)
-    data: list[str] = Field(default_factory=list)
-    security: list[str] = Field(default_factory=list)
-    observability: list[str] = Field(default_factory=list)
-
-
-class DeliveryPlanModel(StrictModel):
-    recommendedOrder: list[str] = Field(default_factory=list)
-    milestones: list[str] = Field(default_factory=list)
-
-
-class FinalRefinementModel(StrictModel):
-    summary: str
-    scope: dict[str, list[str]]
-    knownFacts: list[str] = Field(default_factory=list)
-    assumptions: list[str] = Field(default_factory=list)
-    proposedSplit: ProposedSplitModel
-    crossCuttingConcerns: CrossCuttingConcernsModel
-    deliveryPlan: DeliveryPlanModel
+class RefinementDeliverable(StrictModel):
+    summary: str = ""
+    brief: list[BriefSection] = Field(default_factory=list)
+    plan: list[PlanStep] = Field(default_factory=list)
+    codeDraft: str | None = None
     openQuestions: list[str] = Field(default_factory=list)
+
+
+# --- session ---------------------------------------------------------------
 
 
 class SessionModel(StrictModel):
@@ -111,7 +78,10 @@ class SessionModel(StrictModel):
     status: str
     round: int
     maxRounds: int
-    workItemId: str
+    subjectId: str
+    mode: str = "auto"
+    grid: str = "po"
+    detectedGrid: str | None = None
     createdAt: datetime | None = None
 
 
@@ -121,20 +91,16 @@ class DecisionModel(StrictModel):
     reason: str
 
 
-class WorkItemCharacteristics(StrictModel):
-    businessPriority: int = 3
-    technicalComplexity: int = 3
-    risk: int = 3
-    effort: int = 5
-    businessValue: int = 3
-
-
 class CreateSessionRequest(StrictModel):
-    workItemId: str
+    objective: str = ""
+    mode: str = "auto"
     extraContext: str = ""
     maxRounds: int | None = None
     maxQuestionsPerRound: int | None = None
-    characteristics: WorkItemCharacteristics | None = None
+
+
+class SetModeRequest(StrictModel):
+    mode: str
 
 
 class AnswerInput(StrictModel):
@@ -154,10 +120,10 @@ class StartSessionResponse(StrictModel):
 
 class SessionDetailResponse(StrictModel):
     session: SessionModel
-    workItem: WorkItemDetail
+    subject: SubjectModel
     currentQuestionRound: QuestionRoundModel | None = None
     sessionSummary: SessionSummaryModel
-    finalArtifact: FinalRefinementModel | None = None
+    deliverable: RefinementDeliverable | None = None
 
 
 class SubmitAnswersResponse(StrictModel):
@@ -165,7 +131,10 @@ class SubmitAnswersResponse(StrictModel):
     decision: DecisionModel
     questionRound: QuestionRoundModel | None = None
     sessionSummary: SessionSummaryModel
-    finalArtifact: FinalRefinementModel | None = None
+    deliverable: RefinementDeliverable | None = None
+
+
+# --- LLM structured outputs ------------------------------------------------
 
 
 class GenerateQuestionsOutput(StrictModel):
@@ -180,5 +149,10 @@ class SessionSummaryOutput(SessionSummaryModel):
     pass
 
 
-class FinalRefinementOutput(FinalRefinementModel):
+class RefinementDeliverableOutput(RefinementDeliverable):
     pass
+
+
+class DetectModeOutput(StrictModel):
+    grid: str
+    reason: str = ""

@@ -1,232 +1,154 @@
 from __future__ import annotations
 
+import json
+import re
+import logging
 from typing import Any, Protocol
 
+import httpx
+
+logger = logging.getLogger(__name__)
+
 from src.api.schemas_refinement import (
-    CrossCuttingConcernsModel,
-    DeliveryPlanModel,
-    FinalRefinementOutput,
+    BriefSection,
+    DetectModeOutput,
     GenerateQuestionsOutput,
-    ProposedSplitModel,
+    PlanStep,
     QuestionItem,
+    RefinementDeliverableOutput,
     SessionSummaryOutput,
-    StoryModel,
 )
-from src.i18n import t
+from src.config.settings import settings
+from src.services.prompt_loader import PromptLoader
+from src.services.question_grids import (
+    detect_grid_by_keywords,
+    grid_axes,
+    resolve_grid,
+)
 
 
 class RefinementLLM(Protocol):
     model_name: str
 
+    async def detect_mode(self, context: dict[str, Any]) -> DetectModeOutput:
+        ...
+
     async def generate_questions(self, context: dict[str, Any]) -> GenerateQuestionsOutput:
         ...
 
     async def summarize_context(self, context: dict[str, Any]) -> SessionSummaryOutput:
         ...
 
-    async def generate_final_refinement(self, context: dict[str, Any]) -> FinalRefinementOutput:
+    async def generate_final_refinement(self, context: dict[str, Any]) -> RefinementDeliverableOutput:
         ...
 
 
+# ---------------------------------------------------------------------------
+# Offline mock engine (generalist, topic-agnostic)
+# ---------------------------------------------------------------------------
+
+
 class MockRefinementLLM:
+    """Deterministic offline engine. Templates questions from the active grid and
+    assembles a Brief/Plan from the answers — no external call, works for any subject."""
+
     def __init__(self, model_name: str = "mock-refiner-v1") -> None:
         self.model_name = model_name
 
+    async def detect_mode(self, context: dict[str, Any]) -> DetectModeOutput:
+        grid = detect_grid_by_keywords(self._subject_text(context))
+        return DetectModeOutput(grid=grid, reason="Detected from keywords (offline mode).")
+
     async def generate_questions(self, context: dict[str, Any]) -> GenerateQuestionsOutput:
-        text = self._context_text(context)
-        round_number = int(context.get("round", 0)) + 1
+        grid = resolve_grid(context.get("grid", "po"))
+        axes = grid_axes(grid)
         max_questions = int(context.get("max_questions_per_round", 6))
+        round_number = int(context.get("round", 0)) + 1
 
         questions: list[QuestionItem] = []
-        index = 1
-
-        def add(theme: str, priority: str, question: str, why: str) -> None:
-            nonlocal index
-            if len(questions) >= max_questions:
-                return
-            if question in {item.question for item in questions}:
-                return
-            questions.append(
-                QuestionItem(
-                    id=f"q{index}",
-                    theme=theme,
-                    priority=priority,
-                    question=question,
-                    why=why,
-                )
-            )
-            index += 1
-
         if round_number == 1:
-            if self._mentions(text, "database", "dataset", "data", "schema"):
-                add(
-                    "data",
-                    "high",
-                    t("mock.q.data.scope"),
-                    t("mock.q.data.scope.why"),
+            for index, axis in enumerate(axes):
+                if len(questions) >= max_questions:
+                    break
+                priority = "high" if index < 3 else "medium"
+                questions.append(
+                    QuestionItem(
+                        id=f"q{index + 1}",
+                        theme=axis["label"],
+                        priority=priority,
+                        question=f"À propos de « {axis['label']} » : quel est l'élément clé à clarifier pour ce sujet ?",
+                        why=f"Clarifier « {axis['label']} » réduit l'ambiguïté avant de rédiger le livrable.",
+                    )
                 )
-                add(
-                    "data",
-                    "high",
-                    t("mock.q.data.sync"),
-                    t("mock.q.data.sync.why"),
-                )
-
-            if self._mentions(text, "playwright", "e2e", "test", "api"):
-                add(
-                    "testing",
-                    "high",
-                    t("mock.q.testing.suites"),
-                    t("mock.q.testing.suites.why"),
-                )
-
-            if self._mentions(text, "pipeline", "ci/cd", "continuous", "mobile", "web"):
-                add(
-                    "cicd",
-                    "high",
-                    t("mock.q.cicd.pipelines"),
-                    t("mock.q.cicd.pipelines.why"),
-                )
-
-            add(
-                "dependencies",
-                "medium",
-                t("mock.q.dependencies.owner"),
-                t("mock.q.dependencies.owner.why"),
-            )
-            add(
-                "infra",
-                "medium",
-                t("mock.q.infra.rollback"),
-                t("mock.q.infra.rollback.why"),
-            )
-            add(
-                "functional",
-                "medium",
-                t("mock.q.functional.out_of_scope"),
-                t("mock.q.functional.out_of_scope.why"),
-            )
         else:
-            for unknown in context.get("unknowns", [])[:max_questions]:
-                lower = unknown.lower()
-                if "pipeline" in lower or "ci/cd" in lower:
-                    add(
-                        "cicd",
-                        "high",
-                        t("mock.q.cicd.update"),
-                        t("mock.q.cicd.update.why"),
+            unknowns = context.get("unknowns", [])[:max_questions]
+            for index, unknown in enumerate(unknowns):
+                questions.append(
+                    QuestionItem(
+                        id=f"q{index + 1}",
+                        theme="Zone d'incertitude",
+                        priority="medium",
+                        question=f"Peux-tu préciser : {unknown}",
+                        why="Cette zone reste floue et peut changer le livrable.",
                     )
-                elif "rollback" in lower:
-                    add(
-                        "infra",
-                        "high",
-                        t("mock.q.infra.rollback_path"),
-                        t("mock.q.infra.rollback_path.why"),
-                    )
-                elif "owner" in lower or "ownership" in lower:
-                    add(
-                        "dependencies",
-                        "medium",
-                        t("mock.q.dependencies.signoff"),
-                        t("mock.q.dependencies.signoff.why"),
-                    )
-                else:
-                    add(
-                        "technical",
-                        "medium",
-                        t("mock.q.technical.unknown", unknown=unknown),
-                        t("mock.q.technical.unknown.why"),
-                    )
-
+                )
             if not questions:
-                add(
-                    "testing",
-                    "medium",
-                    t("mock.q.testing.prove"),
-                    t("mock.q.testing.prove.why"),
+                questions.append(
+                    QuestionItem(
+                        id="q1",
+                        theme="Validation",
+                        priority="medium",
+                        question="Reste-t-il un point à trancher avant de figer le livrable ?",
+                        why="Confirmer qu'il n'y a plus d'ambiguïté bloquante.",
+                    )
                 )
 
-        missing_areas = self._missing_areas(text)
-        potential_risks = self._potential_risks(text)
-
+        missing = [axis["label"] for axis in axes[:3]]
         return GenerateQuestionsOutput(
             questions=questions[:max_questions],
-            reasoningSummary=t("mock.reasoning_summary"),
-            potentialRisks=potential_risks,
-            missingAreas=missing_areas,
+            reasoningSummary=f"Questions issues de la grille {grid.upper()}.",
+            potentialRisks=[],
+            missingAreas=missing,
             stopCriteria=False,
         )
 
     async def summarize_context(self, context: dict[str, Any]) -> SessionSummaryOutput:
-        existing_facts = list(context.get("facts", []))
-        existing_assumptions = list(context.get("assumptions", []))
-
-        facts = self._dedupe(existing_facts)
-        assumptions = self._dedupe(existing_assumptions)
+        facts = self._dedupe(list(context.get("facts", [])))
+        assumptions = self._dedupe(list(context.get("assumptions", [])))
         unknowns: list[str] = []
 
-        answers = context.get("answers", [])
-        asked_questions = {item["id"]: item.get("question", "") for item in context.get("asked_questions", [])}
-
-        for answer in answers:
-            answer_text = answer.get("answer", "").strip()
-            question_id = answer.get("questionId")
-            question_text = asked_questions.get(question_id, "")
-            if not answer_text:
+        asked = {item["id"]: item.get("question", "") for item in context.get("asked_questions", [])}
+        for answer in context.get("answers", []):
+            answer_text = (answer.get("answer") or "").strip()
+            question_text = asked.get(answer.get("questionId"), "")
+            if not answer_text or self._looks_unknown(answer_text):
                 if question_text:
                     unknowns.append(question_text)
                 continue
-
-            if self._looks_unknown(answer_text):
-                if question_text:
-                    unknowns.append(question_text)
-                assumptions.append(t("mock.assumption.unclear", question=question_text or question_id))
-                continue
-
             facts.append(answer_text)
 
-        text = self._context_text(context)
-        if self._mentions(text, "database", "dataset", "data") and not any("data" in item.lower() or "dataset" in item.lower() for item in facts):
-            unknowns.append(t("mock.unknown.data_perimeter"))
-        if self._mentions(text, "pipeline", "ci/cd", "continuous", "mobile", "web") and not any("pipeline" in item.lower() or "datasetlabel" in item.lower() for item in facts):
-            unknowns.append(t("mock.unknown.pipeline_config"))
-        if not any("rollback" in item.lower() or "fallback" in item.lower() for item in facts):
-            unknowns.append(t("mock.unknown.rollback"))
-
-        dependencies = self._dedupe(list(context.get("dependencies", [])))
-        if self._mentions(text, "pipeline", "ci/cd", "mobile", "web"):
-            dependencies.append(t("mock.dependency.delivery_qa"))
-        if self._mentions(text, "database", "dataset"):
-            dependencies.append(t("mock.dependency.provisioning"))
-
-        risks = self._dedupe(list(context.get("risks", [])) + self._potential_risks(text))
-        risks.extend(
-            risk
-            for risk in [
-                t("mock.risk.shared_assumptions"),
-                t("mock.risk.pipeline_drift"),
-            ]
-            if risk not in risks
-        )
-
-        unknowns = self._dedupe(unknowns)
         facts = self._dedupe(facts)
-        assumptions = self._dedupe(assumptions)
-        dependencies = self._dedupe(dependencies)
-        risks = self._dedupe(risks)
+        unknowns = self._dedupe(unknowns)
+        dependencies = self._dedupe(list(context.get("dependencies", [])))
+        risks = self._dedupe(list(context.get("risks", [])))
 
         round_number = int(context.get("round", 0))
+        max_rounds = int(context.get("max_rounds", 3))
         if not unknowns:
             confidence = "high"
-        elif round_number >= int(context.get("max_rounds", 3)):
+        elif round_number >= max_rounds:
             confidence = "medium"
         elif len(unknowns) <= 2 and len(facts) >= 3:
             confidence = "medium"
         else:
             confidence = "low"
 
-        enough_context = confidence == "high" or round_number >= int(context.get("max_rounds", 3))
-        reason = t("mock.reason.enough") if enough_context else t("mock.reason.not_enough")
+        enough_context = confidence == "high" or round_number >= max_rounds
+        reason = (
+            "Le contexte est suffisant pour produire le livrable."
+            if enough_context
+            else "Des zones d'incertitude subsistent, un tour supplémentaire est utile."
+        )
 
         return SessionSummaryOutput(
             facts=facts,
@@ -239,202 +161,238 @@ class MockRefinementLLM:
             reason=reason,
         )
 
-    async def generate_final_refinement(self, context: dict[str, Any]) -> FinalRefinementOutput:
-        work_item = context.get("work_item", {})
-        title = work_item.get("title", "Refinement item")
-        text = self._context_text(context)
+    async def generate_final_refinement(self, context: dict[str, Any]) -> RefinementDeliverableOutput:
+        grid = resolve_grid(context.get("grid", "po"))
+        subject = context.get("subject", {})
+        title = subject.get("title", "Sujet")
 
         facts = self._dedupe(list(context.get("facts", [])))
-        assumptions = self._dedupe(list(context.get("assumptions", [])))
         unknowns = self._dedupe(list(context.get("unknowns", [])))
-        dependencies = self._dedupe(list(context.get("dependencies", [])))
-        risks = self._dedupe(list(context.get("risks", [])))
 
-        stories: list[StoryModel] = []
-        order: list[str] = []
+        # Group answered questions under their theme (grid axis) -> Brief sections.
+        asked = {item["id"]: item for item in context.get("asked_questions", [])}
+        by_theme: dict[str, list[str]] = {}
+        for answer in context.get("answers", []):
+            text = (answer.get("answer") or "").strip()
+            if not text or self._looks_unknown(text):
+                continue
+            question = asked.get(answer.get("questionId"), {})
+            theme = question.get("theme") or "Contexte"
+            by_theme.setdefault(theme, []).append(text)
 
-        if self._mentions(text, "database", "dataset", "data"):
-            stories.append(
-                StoryModel(
-                    title=t("mock.story.data.title"),
-                    goal=t("mock.story.data.goal"),
-                    acceptanceCriteria=[
-                        t("mock.story.data.ac1"),
-                        t("mock.story.data.ac2"),
-                        t("mock.story.data.ac3"),
-                    ],
-                    technicalNotes=[
-                        t("mock.story.data.note1"),
-                        t("mock.story.data.note2"),
-                    ],
-                    dependencies=dependencies,
-                    risks=risks,
-                )
-            )
-            order.append(t("mock.order.data"))
+        brief: list[BriefSection] = [BriefSection(heading="Résumé", items=[title] + facts[:1])]
+        for axis in grid_axes(grid):
+            items = by_theme.get(axis["label"])
+            if items:
+                brief.append(BriefSection(heading=axis["label"], items=items))
 
-        stories.append(
-            StoryModel(
-                title=t("mock.story.consumers.title"),
-                goal=t("mock.story.consumers.goal"),
-                acceptanceCriteria=[
-                    t("mock.story.consumers.ac1"),
-                    t("mock.story.consumers.ac2"),
-                ],
-                technicalNotes=[
-                    t("mock.story.consumers.note1"),
-                ],
-                dependencies=dependencies,
-                risks=risks,
-            )
-        )
-        order.append(t("mock.order.consumers"))
-
-        if self._mentions(text, "pipeline", "ci/cd", "continuous", "mobile", "web"):
-            stories.append(
-                StoryModel(
-                    title=t("mock.story.pipeline.title"),
-                    goal=t("mock.story.pipeline.goal"),
-                    acceptanceCriteria=[
-                        t("mock.story.pipeline.ac1"),
-                        t("mock.story.pipeline.ac2"),
-                        t("mock.story.pipeline.ac3"),
-                    ],
-                    technicalNotes=[
-                        t("mock.story.pipeline.note1"),
-                    ],
-                    dependencies=dependencies,
-                    risks=risks,
-                )
-            )
-            order.append(t("mock.order.pipeline"))
-
-        rationale = t("mock.rationale")
-
-        concerns = CrossCuttingConcernsModel(
-            testing=[
-                t("mock.concern.testing1"),
-                t("mock.concern.testing2"),
-            ],
-            cicd=[
-                t("mock.concern.cicd1"),
-                t("mock.concern.cicd2"),
-            ],
-            infra=[
-                t("mock.concern.infra1"),
-            ],
-            data=[
-                t("mock.concern.data1"),
-            ],
-            security=[
-                t("mock.concern.security1"),
-            ],
-            observability=[
-                t("mock.concern.observability1"),
-            ],
-        )
-
-        delivery = DeliveryPlanModel(
-            recommendedOrder=order,
-            milestones=[
-                t("mock.milestone.scope"),
-                t("mock.milestone.target"),
-                t("mock.milestone.consumers"),
-                t("mock.milestone.nonreg"),
-            ],
-        )
-
-        in_scope = [
-            t("mock.scope.refine_for", title=title),
-            t("mock.scope.capture_impacts"),
-        ]
-        out_of_scope = [
-            t("mock.scope.out_redesign"),
+        plan = [
+            PlanStep(title="Cadrer le sujet", detail="Valider objectif, périmètre et parties prenantes."),
+            PlanStep(title="Lever les incertitudes", detail="Traiter les questions ouvertes restantes."),
+            PlanStep(title="Produire le livrable", detail="Formaliser le brief et le partager."),
         ]
 
-        return FinalRefinementOutput(
-            summary=t("mock.summary"),
-            scope={"inScope": in_scope, "outOfScope": out_of_scope},
-            knownFacts=facts,
-            assumptions=assumptions,
-            proposedSplit=ProposedSplitModel(
-                storyCount=len(stories),
-                rationale=rationale,
-                stories=stories,
-            ),
-            crossCuttingConcerns=concerns,
-            deliveryPlan=delivery,
+        code_draft = None
+        if grid in {"technique", "hybride"}:
+            code_draft = f"// Brouillon de départ pour : {title}\n// TODO: implémenter selon le brief ci-contre.\n"
+
+        return RefinementDeliverableOutput(
+            summary=f"Refinement du sujet « {title} » via la grille {grid.upper()}.",
+            brief=brief,
+            plan=plan,
+            codeDraft=code_draft,
             openQuestions=unknowns,
         )
 
-    def _context_text(self, context: dict[str, Any]) -> str:
-        work_item = context.get("work_item", {})
-        values = [
-            work_item.get("title", ""),
-            work_item.get("description", ""),
-            work_item.get("acceptanceCriteria", ""),
-            context.get("extra_context", ""),
-            " ".join(context.get("unknowns", [])),
-            " ".join(context.get("facts", [])),
-        ]
-        return " ".join(value for value in values if value).lower()
-
-    def _missing_areas(self, text: str) -> list[str]:
-        missing = []
-        if self._mentions(text, "database", "dataset", "data"):
-            missing.append(t("mock.missing.data_scope"))
-        if self._mentions(text, "pipeline", "ci/cd", "continuous", "mobile", "web"):
-            missing.append(t("mock.missing.pipeline_impact"))
-        missing.append(t("mock.missing.ownership"))
-        missing.append(t("mock.missing.rollback"))
-        return self._dedupe(missing)
-
-    def _potential_risks(self, text: str) -> list[str]:
-        risks = []
-        if self._mentions(text, "database", "dataset", "data"):
-            risks.append(t("mock.risk.data_drift"))
-        if self._mentions(text, "playwright", "e2e", "api", "test"):
-            risks.append(t("mock.risk.implicit_target"))
-        if self._mentions(text, "pipeline", "ci/cd", "continuous", "mobile", "web"):
-            risks.append(t("mock.risk.param_drift"))
-        return self._dedupe(risks)
+    # -- helpers --
+    def _subject_text(self, context: dict[str, Any]) -> str:
+        subject = context.get("subject", {})
+        values = [subject.get("title", ""), subject.get("description", ""), context.get("extra_context", "")]
+        return " ".join(value for value in values if value)
 
     def _looks_unknown(self, answer: str) -> bool:
         lowered = answer.lower()
         return any(
             token in lowered
-            for token in [
-                "don't know",
-                "do not know",
-                "unknown",
-                "not sure",
-                "to confirm",
-                "a confirmer",
-                "je ne sais pas",
-            ]
+            for token in ["je ne sais pas", "à confirmer", "a confirmer", "pas sûr", "pas sur", "unknown", "not sure", "to confirm"]
         )
-
-    def _mentions(self, text: str, *keywords: str) -> bool:
-        return any(keyword in text for keyword in keywords)
 
     def _dedupe(self, values: list[str]) -> list[str]:
         result: list[str] = []
         seen: set[str] = set()
         for value in values:
-            item = value.strip()
-            if not item:
+            item = (value or "").strip()
+            if not item or item.lower() in seen:
                 continue
-            key = item.lower()
-            if key in seen:
-                continue
-            seen.add(key)
+            seen.add(item.lower())
             result.append(item)
         return result
 
 
-def build_refinement_llm(provider: str, deployment: str, model: str) -> RefinementLLM:
-    if provider == "mock":
-        return MockRefinementLLM()
+# ---------------------------------------------------------------------------
+# Real engine: any OpenAI-compatible /chat/completions endpoint
+# ---------------------------------------------------------------------------
 
-    model_name = deployment or model or "configured-provider"
-    return MockRefinementLLM(model_name=f"{provider}:{model_name}")
+
+def _repair_json_text(text: str) -> str:
+    text = re.sub(r",\s*([}\]])", r"\1", text)
+    text = re.sub(r"([{,])\s*'([^']*)'\s*:", r'\1 "\2":', text)
+    text = re.sub(r":\s*'([^']*)'", r': "\1"', text)
+    text = re.sub(r'"([^"\\]*(\\.[^"\\]*)*)"\s+(?=")', r'"\1", ', text)
+    return text
+
+
+def _extract_json(content: str) -> dict[str, Any]:
+    text = content.strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:]
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end != -1:
+        text = text[start : end + 1]
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        logger.warning("JSON parse failed (%s), attempting repair: %.300s...", exc, text)
+        repaired = _repair_json_text(text)
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError:
+            raise exc
+
+
+class OpenAICompatibleLLM:
+    def __init__(
+        self,
+        *,
+        provider: str,
+        endpoint: str,
+        api_key: str,
+        deployment: str,
+        model: str,
+        temperature: float,
+        max_tokens: int,
+    ) -> None:
+        self.provider = provider
+        self.endpoint = endpoint.rstrip("/") if endpoint else ""
+        self.api_key = api_key
+        self.deployment = deployment
+        self.model = model or deployment or "gpt-4o-mini"
+        self.model_name = f"{provider}:{self.model}"
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.prompt_loader = PromptLoader(settings.prompts_dir)
+        # Deterministic safety net: if a real call fails (network, truncated/invalid
+        # JSON, schema mismatch), degrade to the offline engine instead of a 500.
+        self._fallback = MockRefinementLLM(model_name=self.model_name)
+
+    @property
+    def _is_azure(self) -> bool:
+        return self.provider in {"azure-openai", "azure-foundry"}
+
+    def _url(self) -> str:
+        if self._is_azure:
+            deployment = self.deployment or self.model
+            return f"{self.endpoint}/openai/deployments/{deployment}/chat/completions?api-version=2024-06-01"
+        defaults = {
+            "deepseek": "https://api.deepseek.com",
+            "openrouter": "https://openrouter.ai/api/v1",
+        }
+        base = self.endpoint or defaults.get(self.provider, "https://api.openai.com/v1")
+        return f"{base}/chat/completions"
+
+    def _headers(self) -> dict[str, str]:
+        if self._is_azure:
+            return {"api-key": self.api_key, "Content-Type": "application/json"}
+        return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+
+    async def _chat_json(
+        self, system_prompt: str, task_prompt: str, context: dict[str, Any], max_tokens: int | None = None
+    ) -> dict[str, Any]:
+        user = (
+            f"{task_prompt}\n\nCONTEXT (JSON):\n"
+            f"{json.dumps(context, ensure_ascii=False)}\n\n"
+            "Return a single strict JSON object only, no prose, no code fences."
+        )
+        body: dict[str, Any] = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user},
+            ],
+            "temperature": self.temperature,
+            "max_tokens": max_tokens or self.max_tokens,
+            "response_format": {"type": "json_object"},
+        }
+        if not self._is_azure:
+            body["model"] = self.model
+
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            response = await client.post(self._url(), headers=self._headers(), json=body)
+            response.raise_for_status()
+            payload = response.json()
+        content = payload["choices"][0]["message"]["content"]
+        return _extract_json(content)
+
+    def _system(self) -> str:
+        return self.prompt_loader.load("system-refinement")
+
+    async def detect_mode(self, context: dict[str, Any]) -> DetectModeOutput:
+        try:
+            data = await self._chat_json(self._system(), self.prompt_loader.load("detect-mode"), context)
+            return DetectModeOutput.model_validate(data)
+        except Exception as exc:
+            logger.warning("detect_mode via %s failed (%s); using offline fallback.", self.model_name, exc)
+            return await self._fallback.detect_mode(context)
+
+    async def generate_questions(self, context: dict[str, Any]) -> GenerateQuestionsOutput:
+        try:
+            data = await self._chat_json(self._system(), self.prompt_loader.load("generate-questions"), context)
+            return GenerateQuestionsOutput.model_validate(data)
+        except Exception as exc:
+            logger.warning("generate_questions via %s failed (%s); using offline fallback.", self.model_name, exc)
+            return await self._fallback.generate_questions(context)
+
+    async def summarize_context(self, context: dict[str, Any]) -> SessionSummaryOutput:
+        try:
+            data = await self._chat_json(self._system(), self.prompt_loader.load("summarize-context"), context)
+            return SessionSummaryOutput.model_validate(data)
+        except Exception as exc:
+            logger.warning("summarize_context via %s failed (%s); using offline fallback.", self.model_name, exc)
+            return await self._fallback.summarize_context(context)
+
+    async def generate_final_refinement(self, context: dict[str, Any]) -> RefinementDeliverableOutput:
+        # The deliverable is the largest output — give it a bigger token budget so the
+        # JSON is not truncated, and fall back deterministically if it still fails.
+        budget = max(self.max_tokens, 8000)
+        try:
+            data = await self._chat_json(
+                self._system(), self.prompt_loader.load("generate-final-refinement"), context, max_tokens=budget
+            )
+            return RefinementDeliverableOutput.model_validate(data)
+        except Exception as exc:
+            logger.warning("generate_final_refinement via %s failed (%s); using offline fallback.", self.model_name, exc)
+            return await self._fallback.generate_final_refinement(context)
+
+
+def build_refinement_llm(
+    *,
+    provider: str,
+    endpoint: str = "",
+    api_key: str = "",
+    deployment: str = "",
+    model: str = "",
+) -> RefinementLLM:
+    """Return a real OpenAI-compatible engine when configured, else the offline mock."""
+    if provider and provider != "mock" and api_key:
+        return OpenAICompatibleLLM(
+            provider=provider,
+            endpoint=endpoint,
+            api_key=api_key,
+            deployment=deployment,
+            model=model,
+            temperature=settings.llm_temperature,
+            max_tokens=settings.llm_max_tokens,
+        )
+    return MockRefinementLLM()

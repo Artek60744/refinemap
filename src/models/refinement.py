@@ -30,9 +30,11 @@ class RefinementSession(Base):
 
     id = Column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(64), ForeignKey("users.id"), nullable=False, index=True)
-    work_item_id = Column(String(128), nullable=False, index=True)
-    work_item_type = Column(String(128), nullable=True)
-    work_item_title = Column(String(512), nullable=True)
+    subject_id = Column(String(128), nullable=False, index=True)
+    subject_title = Column(String(512), nullable=True)
+    mode = Column(String(32), nullable=False, default="auto")
+    grid = Column(String(32), nullable=False, default="po")
+    detected_grid = Column(String(32), nullable=True)
     status = Column(String(32), nullable=False, default="DRAFT")
     round = Column(Integer, nullable=False, default=0)
     max_rounds = Column(Integer, nullable=False, default=3)
@@ -47,10 +49,10 @@ class RefinementSession(Base):
 
     user = relationship("User", back_populates="sessions")
     snapshots = relationship(
-        "WorkItemSnapshot",
+        "SubjectSnapshot",
         back_populates="session",
         cascade="all, delete-orphan",
-        order_by="WorkItemSnapshot.created_at",
+        order_by="SubjectSnapshot.created_at",
     )
     question_rounds = relationship(
         "QuestionRound",
@@ -78,12 +80,12 @@ class RefinementSession(Base):
     )
 
 
-class WorkItemSnapshot(Base):
-    __tablename__ = "work_item_snapshots"
+class SubjectSnapshot(Base):
+    __tablename__ = "subject_snapshots"
 
     id = Column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id = Column(String(64), ForeignKey("refinement_sessions.id"), nullable=False, index=True)
-    source = Column(String(64), nullable=False, default="azure-devops")
+    source = Column(String(64), nullable=False, default="prompt")
     normalized_payload = Column(JSON, nullable=False)
     raw_payload = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=now_utc)

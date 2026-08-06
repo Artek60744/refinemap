@@ -54,6 +54,15 @@
   --color-on-surface: #181c20;
   --color-on-background: #181c20;
 
+  --color-node-blue: #407BFF;
+  --color-node-purple: #9A66FF;
+  --color-node-pink: #FF578A;
+  --color-node-orange: #FF6B35;
+  --color-node-yellow: #FFB300;
+  --color-score-good: #34C759;
+  --color-score-warn: #FF9500;
+  --color-score-alert: #FF3B30;
+
   --radius-DEFAULT: 0.125rem;
   --radius-lg: 0.25rem;
   --radius-xl: 0.5rem;
@@ -118,4 +127,25 @@ body {
     linear-gradient(to bottom, var(--color-border-subtle) 1px, transparent 1px);
   background-size: 40px 40px;
   background-position: center top;
+}
+
+/* War Room tree map styles */
+.tree-line::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 24px;
+  bottom: 0;
+  width: 2px;
+  background-color: var(--color-border-subtle);
+}
+
+.tree-node-line::after {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 12px;
+  width: 12px;
+  height: 2px;
+  background-color: var(--color-border-subtle);
 }

@@ -1,6 +1,5 @@
 import { apiFetch } from "./client";
 import type {
-  AzureDevOpsProjectsResponse,
   ConnectionTestRequest,
   ConnectionTestResponse,
   SaveSettingsRequest,
@@ -20,15 +19,4 @@ export function saveSettings(payload: SaveSettingsRequest): Promise<SaveSettings
 
 export function testLlm(payload: ConnectionTestRequest): Promise<ConnectionTestResponse> {
   return apiFetch(`${BASE}/test/llm`, { method: "POST", body: JSON.stringify(payload) });
-}
-
-export function testAzureDevOps(payload: ConnectionTestRequest): Promise<ConnectionTestResponse> {
-  return apiFetch(`${BASE}/test/azure-devops`, { method: "POST", body: JSON.stringify(payload) });
-}
-
-export function listAdoProjects(payload: ConnectionTestRequest): Promise<AzureDevOpsProjectsResponse> {
-  return apiFetch(`${BASE}/azure-devops/projects`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
 }

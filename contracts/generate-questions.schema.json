@@ -27,17 +27,8 @@
           },
           "theme": {
             "type": "string",
-            "enum": [
-              "functional",
-              "data",
-              "technical",
-              "dependencies",
-              "testing",
-              "cicd",
-              "infra",
-              "security",
-              "observability"
-            ]
+            "minLength": 2,
+            "description": "The active grid axis label this question addresses."
           },
           "priority": {
             "type": "string",

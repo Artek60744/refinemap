@@ -17,18 +17,8 @@ class LlmSettingsModel(StrictModel):
     source: str = "environment"
 
 
-class AzureDevOpsSettingsModel(StrictModel):
-    orgUrl: str = ""
-    project: str = ""
-    mockMode: bool = True
-    patConfigured: bool = False
-    patHint: str | None = None
-    source: str = "environment"
-
-
 class SettingsViewResponse(StrictModel):
     llm: LlmSettingsModel
-    azureDevOps: AzureDevOpsSettingsModel
 
 
 class SaveSettingsRequest(StrictModel):
@@ -37,10 +27,6 @@ class SaveSettingsRequest(StrictModel):
     llmApiKey: str = ""
     llmDeployment: str = ""
     llmModel: str = ""
-    adoOrgUrl: str = ""
-    adoProject: str = ""
-    adoPat: str = ""
-    adoMockMode: bool = True
 
 
 class ConnectionTestRequest(StrictModel):
@@ -49,21 +35,6 @@ class ConnectionTestRequest(StrictModel):
     apiKey: str | None = None
     deployment: str | None = None
     model: str | None = None
-    orgUrl: str | None = None
-    project: str | None = None
-    pat: str | None = None
-    mockMode: bool | None = None
-
-
-class AzureDevOpsProjectModel(StrictModel):
-    id: str = ""
-    name: str
-
-
-class AzureDevOpsProjectsResponse(StrictModel):
-    success: bool
-    message: str
-    projects: list[AzureDevOpsProjectModel] = Field(default_factory=list)
 
 
 class ConnectionTestResponse(StrictModel):

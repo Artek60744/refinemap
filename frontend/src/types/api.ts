@@ -3,37 +3,16 @@
 // --- refinement ------------------------------------------------------------
 
 export type SessionStatus = "DRAFT" | "QUESTIONING" | "ANALYZING" | "FINAL_READY";
+export type RefinementMode = "po" | "technique" | "hybride" | "auto";
+export type RefinementGrid = "po" | "technique" | "hybride";
 
-export interface WorkItemRelation {
-  type: string;
-  targetId: string | null;
-  url: string | null;
-}
-
-export interface WorkItemSearchItem {
+export interface SubjectModel {
   id: string;
-  type: string;
   title: string;
-  state: string | null;
-  tags: string[];
-  areaPath: string | null;
-  iterationPath: string | null;
-}
-
-export interface WorkItemDetail extends WorkItemSearchItem {
-  url: string | null;
-  description: string | null;
-  acceptanceCriteria: string | null;
-  priority: number | null;
-  relations: WorkItemRelation[];
-}
-
-export interface SearchWorkItemsResponse {
-  items: WorkItemSearchItem[];
-}
-
-export interface GetWorkItemResponse {
-  workItem: WorkItemDetail;
+  description: string;
+  mode: string;
+  grid: string;
+  notes: string;
 }
 
 export interface QuestionItem {
@@ -61,43 +40,21 @@ export interface SessionSummaryModel {
   reason: string;
 }
 
-export interface StoryModel {
+export interface BriefSection {
+  heading: string;
+  items: string[];
+}
+
+export interface PlanStep {
   title: string;
-  goal: string;
-  acceptanceCriteria: string[];
-  technicalNotes: string[];
-  dependencies: string[];
-  risks: string[];
+  detail: string;
 }
 
-export interface ProposedSplitModel {
-  storyCount: number;
-  rationale: string;
-  stories: StoryModel[];
-}
-
-export interface CrossCuttingConcernsModel {
-  testing: string[];
-  cicd: string[];
-  infra: string[];
-  data: string[];
-  security: string[];
-  observability: string[];
-}
-
-export interface DeliveryPlanModel {
-  recommendedOrder: string[];
-  milestones: string[];
-}
-
-export interface FinalRefinementModel {
+export interface RefinementDeliverable {
   summary: string;
-  scope: Record<string, string[]>;
-  knownFacts: string[];
-  assumptions: string[];
-  proposedSplit: ProposedSplitModel;
-  crossCuttingConcerns: CrossCuttingConcernsModel;
-  deliveryPlan: DeliveryPlanModel;
+  brief: BriefSection[];
+  plan: PlanStep[];
+  codeDraft: string | null;
   openQuestions: string[];
 }
 
@@ -106,7 +63,10 @@ export interface SessionModel {
   status: SessionStatus;
   round: number;
   maxRounds: number;
-  workItemId: string;
+  subjectId: string;
+  mode: string;
+  grid: string;
+  detectedGrid: string | null;
   createdAt: string | null;
 }
 
@@ -117,10 +77,15 @@ export interface DecisionModel {
 }
 
 export interface CreateSessionRequest {
-  workItemId: string;
-  extraContext: string;
+  objective: string;
+  mode?: string;
+  extraContext?: string;
   maxRounds?: number;
   maxQuestionsPerRound?: number;
+}
+
+export interface SetModeRequest {
+  mode: string;
 }
 
 export interface AnswerInput {
@@ -140,10 +105,10 @@ export interface StartSessionResponse {
 
 export interface SessionDetailResponse {
   session: SessionModel;
-  workItem: WorkItemDetail;
+  subject: SubjectModel;
   currentQuestionRound: QuestionRoundModel | null;
   sessionSummary: SessionSummaryModel;
-  finalArtifact: FinalRefinementModel | null;
+  deliverable: RefinementDeliverable | null;
 }
 
 export interface SubmitAnswersResponse {
@@ -151,7 +116,7 @@ export interface SubmitAnswersResponse {
   decision: DecisionModel;
   questionRound: QuestionRoundModel | null;
   sessionSummary: SessionSummaryModel;
-  finalArtifact: FinalRefinementModel | null;
+  deliverable: RefinementDeliverable | null;
 }
 
 // --- settings --------------------------------------------------------------
@@ -166,18 +131,8 @@ export interface LlmSettingsModel {
   source: string;
 }
 
-export interface AzureDevOpsSettingsModel {
-  orgUrl: string;
-  project: string;
-  mockMode: boolean;
-  patConfigured: boolean;
-  patHint: string | null;
-  source: string;
-}
-
 export interface SettingsViewResponse {
   llm: LlmSettingsModel;
-  azureDevOps: AzureDevOpsSettingsModel;
 }
 
 export interface SaveSettingsRequest {
@@ -186,10 +141,6 @@ export interface SaveSettingsRequest {
   llmApiKey: string;
   llmDeployment: string;
   llmModel: string;
-  adoOrgUrl: string;
-  adoProject: string;
-  adoPat: string;
-  adoMockMode: boolean;
 }
 
 export interface ConnectionTestRequest {
@@ -198,21 +149,6 @@ export interface ConnectionTestRequest {
   apiKey?: string;
   deployment?: string;
   model?: string;
-  orgUrl?: string;
-  project?: string;
-  pat?: string;
-  mockMode?: boolean;
-}
-
-export interface AzureDevOpsProjectModel {
-  id: string;
-  name: string;
-}
-
-export interface AzureDevOpsProjectsResponse {
-  success: boolean;
-  message: string;
-  projects: AzureDevOpsProjectModel[];
 }
 
 export interface ConnectionTestResponse {

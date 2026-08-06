@@ -68,8 +68,8 @@ export default function SessionResultPage() {
       </div>
 
       <section className="rounded-xl border border-border-subtle bg-surface-container-lowest p-6 shadow-sm">
-        {detail.finalArtifact ? (
-          <ArtifactView artifact={detail.finalArtifact} />
+        {detail.deliverable ? (
+          <ArtifactView deliverable={detail.deliverable} />
         ) : (
           <div className="rounded-lg border border-accent-yellow/30 bg-accent-yellow/10 p-4 text-sm text-on-surface-variant">
             {t("result.not_available")}

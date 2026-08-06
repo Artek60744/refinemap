@@ -14,8 +14,8 @@ from src.models.refinement import (
     RefinementSession,
     SessionArtifact,
     SessionSummary,
+    SubjectSnapshot,
     User,
-    WorkItemSnapshot,
 )
 
 
@@ -36,7 +36,10 @@ class RefinementRepository:
         self,
         *,
         user: User,
-        work_item: dict[str, Any],
+        subject: dict[str, Any],
+        mode: str,
+        grid: str,
+        detected_grid: str | None,
         extra_context: str,
         max_rounds: int,
         max_questions_per_round: int,
@@ -46,9 +49,11 @@ class RefinementRepository:
     ) -> RefinementSession:
         session = RefinementSession(
             user_id=user.id,
-            work_item_id=str(work_item["id"]),
-            work_item_type=work_item.get("type"),
-            work_item_title=work_item.get("title"),
+            subject_id=str(subject["id"]),
+            subject_title=subject.get("title"),
+            mode=mode,
+            grid=grid,
+            detected_grid=detected_grid,
             status="DRAFT",
             round=0,
             max_rounds=max_rounds,
@@ -63,15 +68,15 @@ class RefinementRepository:
         self.db.refresh(session)
         return session
 
-    def add_work_item_snapshot(
+    def add_subject_snapshot(
         self,
         *,
         session_id: str,
         normalized_payload: dict[str, Any],
-        raw_payload: dict[str, Any] | None,
-        source: str = "azure-devops",
-    ) -> WorkItemSnapshot:
-        snapshot = WorkItemSnapshot(
+        raw_payload: dict[str, Any] | None = None,
+        source: str = "prompt",
+    ) -> SubjectSnapshot:
+        snapshot = SubjectSnapshot(
             session_id=session_id,
             source=source,
             normalized_payload=normalized_payload,
@@ -80,8 +85,28 @@ class RefinementRepository:
         self.db.add(snapshot)
         self.db.commit()
         self.db.refresh(snapshot)
-        self.add_artifact(session_id=session_id, artifact_type="WORK_ITEM_SNAPSHOT", payload=normalized_payload)
+        self.add_artifact(session_id=session_id, artifact_type="SUBJECT_SNAPSHOT", payload=normalized_payload)
         return snapshot
+
+    def set_mode(self, session: RefinementSession, *, mode: str, grid: str) -> None:
+        session.mode = mode
+        session.grid = grid
+        session.detected_grid = None
+        self.db.commit()
+
+    def reset_rounds(self, session: RefinementSession) -> None:
+        """Clear questioning/answers/summaries so the flow can restart on a new grid."""
+        for answer in list(session.answers):
+            self.db.delete(answer)
+        for round_model in list(session.question_rounds):
+            self.db.delete(round_model)
+        for summary in list(session.summaries):
+            self.db.delete(summary)
+        session.round = 0
+        session.status = "DRAFT"
+        session.completed_at = None
+        self.db.commit()
+        self.db.refresh(session)
 
     def get_session(self, session_id: str) -> RefinementSession | None:
         stmt = (
@@ -228,7 +253,7 @@ class RefinementRepository:
         self.db.refresh(artifact)
         return artifact
 
-    def latest_snapshot(self, session: RefinementSession) -> WorkItemSnapshot | None:
+    def latest_snapshot(self, session: RefinementSession) -> SubjectSnapshot | None:
         if not session.snapshots:
             return None
         return max(session.snapshots, key=lambda item: item.created_at)

@@ -26,7 +26,6 @@ class AppSetting(Base):
 class SettingCategories:
     GENERAL = "general"
     LLM = "llm"
-    AZURE_DEVOPS = "azure_devops"
 
 
 class SettingKeys:
@@ -36,13 +35,7 @@ class SettingKeys:
     LLM_DEPLOYMENT = "llm_deployment"
     LLM_MODEL = "llm_model"
 
-    ADO_ORG_URL = "ado_org_url"
-    ADO_PROJECT = "ado_project"
-    ADO_PAT = "ado_pat"
-    ADO_MOCK_MODE = "ado_mock_mode"
-
 
 SENSITIVE_SETTING_KEYS = {
     SettingKeys.LLM_API_KEY,
-    SettingKeys.ADO_PAT,
 }

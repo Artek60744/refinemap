@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -9,25 +10,26 @@ from src.agents.refinement_workflow import create_initial_state, create_refineme
 from src.api.schemas_refinement import (
     CreateSessionRequest,
     DecisionModel,
-    FinalRefinementModel,
-    GetWorkItemResponse,
     QuestionItem,
     QuestionRoundModel,
-    SearchWorkItemsResponse,
+    RefinementDeliverable,
     SessionDetailResponse,
     SessionModel,
     SessionSummaryModel,
     StartSessionResponse,
+    SubjectModel,
     SubmitAnswersRequest,
     SubmitAnswersResponse,
-    WorkItemDetail,
-    WorkItemSearchItem,
 )
 from src.config.settings import settings
 from src.repositories.refinement_repository import RefinementRepository
-from src.services.artifact_renderer import render_final_refinement_markdown
-from src.services.azure_devops_refinement import build_work_item_provider_from_values
+from src.services.artifact_renderer import render_deliverable_markdown
 from src.services.prompt_loader import PromptLoader
+from src.services.question_grids import (
+    detect_grid_by_keywords,
+    normalize_mode,
+    resolve_grid,
+)
 from src.services.refinement_llm import build_refinement_llm
 from src.services.settings_service import SettingsService
 
@@ -36,28 +38,34 @@ class RefinementService:
     def __init__(self) -> None:
         self.prompt_loader = PromptLoader(settings.prompts_dir)
 
-    async def search_work_items(self, db: Session, query: str, limit: int = 10) -> SearchWorkItemsResponse:
-        provider, _llm, _graph, _runtime = self._build_runtime_components(db)
-        items = await provider.search(query, limit=limit)
-        return SearchWorkItemsResponse(items=[WorkItemSearchItem.model_validate(self._trim_work_item(item)) for item in items])
-
-    async def get_work_item(self, db: Session, work_item_id: str) -> GetWorkItemResponse:
-        provider, _llm, _graph, _runtime = self._build_runtime_components(db)
-        item = await provider.get_by_id(work_item_id)
-        return GetWorkItemResponse(workItem=WorkItemDetail.model_validate(self._clean_work_item(item)))
-
     async def start_session(self, db: Session, request: CreateSessionRequest) -> StartSessionResponse:
+        objective = request.objective.strip()
+        if not objective:
+            raise ValueError("Provide an objective prompt to start a session.")
+
         repo = RefinementRepository(db)
         user = repo.ensure_local_user(settings.default_user_email, settings.default_user_name)
+        llm, graph, runtime = self._build_runtime_components(db)
 
-        provider, llm, graph, runtime = self._build_runtime_components(db)
+        mode = normalize_mode(request.mode)
+        subject = self._synthesize_subject(objective)
 
-        raw_work_item = await provider.get_by_id(request.workItemId)
-        work_item_payload = self._clean_work_item(raw_work_item)
+        detected = await self._detect_grid(llm, subject, request.extraContext)
+        if mode == "auto":
+            grid = detected
+            detected_grid = None
+        else:
+            grid = resolve_grid(mode)
+            detected_grid = detected if detected != grid else None
+        subject["mode"] = mode
+        subject["grid"] = grid
 
         session = repo.create_session(
             user=user,
-            work_item=work_item_payload,
+            subject=subject,
+            mode=mode,
+            grid=grid,
+            detected_grid=detected_grid,
             extra_context=request.extraContext,
             max_rounds=request.maxRounds or settings.refinement_max_rounds,
             max_questions_per_round=request.maxQuestionsPerRound or settings.refinement_max_questions_per_round,
@@ -65,39 +73,9 @@ class RefinementService:
             llm_provider=runtime.llm.provider,
             llm_model=llm.model_name,
         )
-        repo.add_work_item_snapshot(
-            session_id=session.id,
-            normalized_payload=work_item_payload,
-            raw_payload=raw_work_item.get("raw") if isinstance(raw_work_item, dict) else None,
-        )
+        repo.add_subject_snapshot(session_id=session.id, normalized_payload=subject)
 
-        initial_state = create_initial_state(
-            session_id=session.id,
-            work_item=work_item_payload,
-            extra_context=request.extraContext,
-            max_rounds=session.max_rounds,
-            max_questions_per_round=session.max_questions_per_round,
-        )
-        result = await graph.ainvoke(initial_state, config={"configurable": {"thread_id": session.id}})
-
-        repo_session = repo.get_session(session.id)
-        assert repo_session is not None
-        question_round = repo.add_question_round(repo_session, result["latest_question_round"])
-
-        derived_summary = {
-            "facts": [],
-            "assumptions": [],
-            "unknowns": result["latest_question_round"].get("missingAreas", []),
-            "dependencies": [],
-            "risks": result["latest_question_round"].get("potentialRisks", []),
-            "confidence": "low",
-            "enoughContext": False,
-            "reason": result["latest_question_round"].get(
-                "reasoningSummary",
-                "Initial question round generated.",
-            ),
-        }
-        repo.add_summary(repo_session, derived_summary, round_number=0)
+        question_round = await self._run_initial_round(repo, graph, session.id, subject, grid)
 
         refreshed = repo.get_session(session.id)
         assert refreshed is not None
@@ -107,23 +85,74 @@ class RefinementService:
             sessionSummary=self._to_summary_model(repo.latest_summary(refreshed)),
         )
 
+    async def set_mode(self, db: Session, session_id: str, mode: str) -> SessionDetailResponse:
+        repo = RefinementRepository(db)
+        session = repo.get_session(session_id)
+        if session is None:
+            raise KeyError(f"Session not found: {session_id}")
+
+        llm, graph, _runtime = self._build_runtime_components(db)
+        subject = self._subject_dict(session)
+
+        mode = normalize_mode(mode)
+        if mode == "auto":
+            grid = await self._detect_grid(llm, subject, session.extra_context or "")
+        else:
+            grid = resolve_grid(mode)
+        subject["mode"] = mode
+        subject["grid"] = grid
+
+        repo.set_mode(session, mode=mode, grid=grid)
+        repo.reset_rounds(session)
+        await self._run_initial_round(repo, graph, session.id, subject, grid)
+        return await self.get_session(db, session_id)
+
+    async def _run_initial_round(self, repo, graph, session_id: str, subject: dict[str, Any], grid: str):
+        session = repo.get_session(session_id)
+        assert session is not None
+        initial_state = create_initial_state(
+            session_id=session_id,
+            subject=subject,
+            mode=subject.get("mode", "auto"),
+            grid=grid,
+            extra_context=session.extra_context or "",
+            max_rounds=session.max_rounds,
+            max_questions_per_round=session.max_questions_per_round,
+        )
+        result = await graph.ainvoke(initial_state, config={"configurable": {"thread_id": session_id}})
+
+        session = repo.get_session(session_id)
+        assert session is not None
+        question_round = repo.add_question_round(session, result["latest_question_round"])
+        derived_summary = {
+            "facts": [],
+            "assumptions": [],
+            "unknowns": result["latest_question_round"].get("missingAreas", []),
+            "dependencies": [],
+            "risks": result["latest_question_round"].get("potentialRisks", []),
+            "confidence": "low",
+            "enoughContext": False,
+            "reason": result["latest_question_round"].get("reasoningSummary", "Initial question round generated."),
+        }
+        repo.add_summary(repo.get_session(session_id), derived_summary, round_number=0)
+        return question_round
+
     async def get_session(self, db: Session, session_id: str) -> SessionDetailResponse:
         repo = RefinementRepository(db)
         session = repo.get_session(session_id)
         if session is None:
             raise KeyError(f"Session not found: {session_id}")
 
-        snapshot = repo.latest_snapshot(session)
         summary = repo.latest_summary(session)
         current_round = repo.get_current_round(session)
         final_artifact = repo.latest_final_artifact(session)
 
         return SessionDetailResponse(
             session=self._to_session_model(session),
-            workItem=WorkItemDetail.model_validate(snapshot.normalized_payload if snapshot else {}),
+            subject=self._to_subject_model(session),
             currentQuestionRound=self._to_question_round_model(current_round) if current_round else None,
             sessionSummary=self._to_summary_model(summary),
-            finalArtifact=FinalRefinementModel.model_validate(final_artifact.payload) if final_artifact else None,
+            deliverable=RefinementDeliverable.model_validate(final_artifact.payload) if final_artifact else None,
         )
 
     async def submit_answers(self, db: Session, session_id: str, request: SubmitAnswersRequest) -> SubmitAnswersResponse:
@@ -136,7 +165,7 @@ class RefinementService:
         reloaded = repo.get_session(session_id)
         assert reloaded is not None
 
-        _provider, _llm, graph, _runtime = self._build_runtime_components(db)
+        _llm, graph, _runtime = self._build_runtime_components(db)
         state = self._build_state_from_session(reloaded, workflow_action="answers_submitted")
         result = await graph.ainvoke(state, config={"configurable": {"thread_id": session_id}})
 
@@ -146,15 +175,15 @@ class RefinementService:
             repo.add_summary(current, result["latest_summary"], round_number=current.round)
 
         question_round_model = None
-        final_artifact_model = None
+        deliverable_model = None
 
-        if result.get("final_artifact"):
-            repo.add_final_artifact(current, result["final_artifact"])
+        if result.get("deliverable"):
+            repo.add_final_artifact(current, result["deliverable"])
             current = repo.get_session(session_id)
             assert current is not None
             final_artifact = repo.latest_final_artifact(current)
             if final_artifact is not None:
-                final_artifact_model = FinalRefinementModel.model_validate(final_artifact.payload)
+                deliverable_model = RefinementDeliverable.model_validate(final_artifact.payload)
         elif result.get("latest_question_round"):
             question_round = repo.add_question_round(current, result["latest_question_round"])
             question_round_model = self._to_question_round_model(question_round)
@@ -169,20 +198,47 @@ class RefinementService:
             decision=decision,
             questionRound=question_round_model,
             sessionSummary=self._to_summary_model(summary),
-            finalArtifact=final_artifact_model,
+            deliverable=deliverable_model,
         )
 
     async def export_markdown(self, db: Session, session_id: str) -> str:
         session_detail = await self.get_session(db, session_id)
-        if session_detail.finalArtifact is None:
-            raise ValueError("No final artifact available yet for this session")
-        return render_final_refinement_markdown(session_detail.finalArtifact)
+        if session_detail.deliverable is None:
+            raise ValueError("No deliverable available yet for this session")
+        return render_deliverable_markdown(session_detail.subject, session_detail.deliverable)
 
-    def _build_state_from_session(self, session, workflow_action: str) -> dict[str, Any]:
+    # -- grid detection --
+    async def _detect_grid(self, llm, subject: dict[str, Any], extra_context: str) -> str:
+        try:
+            detection = await llm.detect_mode({"subject": subject, "extra_context": extra_context})
+            return resolve_grid(detection.grid)
+        except Exception:
+            text = " ".join([subject.get("title", ""), subject.get("description", ""), extra_context])
+            return detect_grid_by_keywords(text)
+
+    def _synthesize_subject(self, objective: str) -> dict[str, Any]:
+        title = objective.strip()
+        return {
+            "id": uuid4().hex[:8],
+            "title": title[:200],
+            "description": title,
+            "mode": "auto",
+            "grid": "po",
+            "notes": "",
+        }
+
+    def _subject_dict(self, session) -> dict[str, Any]:
         snapshot = None
         if session.snapshots:
             snapshot = max(session.snapshots, key=lambda item: item.created_at)
+        payload = dict(snapshot.normalized_payload) if snapshot else {}
+        payload.setdefault("id", session.subject_id)
+        payload.setdefault("title", session.subject_title or "")
+        payload["mode"] = session.mode
+        payload["grid"] = session.grid
+        return payload
 
+    def _build_state_from_session(self, session, workflow_action: str) -> dict[str, Any]:
         latest_summary = None
         if session.summaries:
             latest_summary = max(session.summaries, key=lambda item: item.round_number)
@@ -200,18 +256,15 @@ class RefinementService:
 
         answers_payload = []
         for answer in session.answers:
-            answers_payload.append(
-                {
-                    "questionId": answer.question.external_id,
-                    "answer": answer.answer_text,
-                }
-            )
+            answers_payload.append({"questionId": answer.question.external_id, "answer": answer.answer_text})
 
         return {
             "workflow_action": workflow_action,
             "session_id": session.id,
-            "work_item_id": session.work_item_id,
-            "work_item": snapshot.normalized_payload if snapshot else {},
+            "subject_id": session.subject_id,
+            "subject": self._subject_dict(session),
+            "mode": session.mode,
+            "grid": session.grid,
             "extra_context": session.extra_context or "",
             "round": session.round,
             "max_rounds": session.max_rounds,
@@ -233,8 +286,25 @@ class RefinementService:
             status=session.status,
             round=session.round,
             maxRounds=session.max_rounds,
-            workItemId=session.work_item_id,
+            subjectId=session.subject_id,
+            mode=session.mode,
+            grid=session.grid,
+            detectedGrid=session.detected_grid,
             createdAt=session.created_at,
+        )
+
+    def _to_subject_model(self, session) -> SubjectModel:
+        snapshot = None
+        if session.snapshots:
+            snapshot = max(session.snapshots, key=lambda item: item.created_at)
+        payload = snapshot.normalized_payload if snapshot else {}
+        return SubjectModel(
+            id=session.subject_id,
+            title=session.subject_title or payload.get("title", ""),
+            description=payload.get("description", ""),
+            mode=session.mode,
+            grid=session.grid,
+            notes=session.extra_context or "",
         )
 
     def _to_question_round_model(self, question_round) -> QuestionRoundModel:
@@ -267,37 +337,17 @@ class RefinementService:
             reason=summary.reason,
         )
 
-    def _trim_work_item(self, item: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "id": str(item["id"]),
-            "type": item.get("type", "Work Item"),
-            "title": item.get("title", "Untitled"),
-            "state": item.get("state"),
-            "tags": item.get("tags", []),
-            "areaPath": item.get("areaPath"),
-            "iterationPath": item.get("iterationPath"),
-        }
-
-    def _clean_work_item(self, item: dict[str, Any]) -> dict[str, Any]:
-        payload = dict(item)
-        payload.pop("raw", None)
-        return payload
-
     def _build_runtime_components(self, db: Session):
         runtime = SettingsService(db).get_runtime_config()
-        provider = build_work_item_provider_from_values(
-            org_url=runtime.azure_devops.org_url,
-            project=runtime.azure_devops.project,
-            pat=runtime.azure_devops.pat,
-            mock_mode=runtime.azure_devops.mock_mode,
-        )
         llm = build_refinement_llm(
             provider=runtime.llm.provider,
+            endpoint=runtime.llm.endpoint,
+            api_key=runtime.llm.api_key,
             deployment=runtime.llm.deployment,
             model=runtime.llm.model,
         )
         graph = create_refinement_graph(llm)
-        return provider, llm, graph, runtime
+        return llm, graph, runtime
 
 
 @lru_cache
