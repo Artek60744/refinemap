@@ -21,6 +21,7 @@ export interface QuestionItem {
   priority: string;
   question: string;
   why: string;
+  suggestions?: string[];
 }
 
 export interface QuestionRoundModel {

@@ -15,7 +15,9 @@ Rules:
    - `technique`: clarify expected behavior, edge cases, integrations, data,
      technical constraints and risks, migrations, validation plan.
    - `hybride`: make product and technical concerns converge.
-3. Use the axes provided in `grid_axes` as the backbone for questions and Brief sections.
+3. Use the axes provided in `grid_axes` as the backbone for the first question round and
+   for Brief sections. Later rounds keep the axes as labels (`theme`) but their questions
+   must drill into the answers already given, not re-cover the axes.
 4. Ask the right questions and help the team converge — do not answer for them.
 5. Distinguish facts, assumptions, unknowns, dependencies and risks.
 6. Write every user-facing string in the requested `language` (`fr` = French,

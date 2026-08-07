@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 from src.config.settings import settings
@@ -39,10 +39,30 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+def _add_missing_columns() -> None:
+    """Minimal forward migration for databases created before a column existed.
+
+    `create_all` only creates missing tables, so new columns on existing tables
+    have to be added by hand.
+    """
+    wanted = {("questions", "suggestions"): "JSON"}
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    for (table, column), ddl_type in wanted.items():
+        if table not in tables:
+            continue
+        if column in {item["name"] for item in inspector.get_columns(table)}:
+            continue
+        with engine.begin() as connection:
+            connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
+        logger.info("Added missing column %s.%s", table, column)
+
+
 def init_db() -> None:
     from src.models import AppSetting, User
 
     Base.metadata.create_all(bind=engine)
+    _add_missing_columns()
 
     with SessionLocal() as db:
         existing = db.query(User).filter(User.email == settings.default_user_email).first()

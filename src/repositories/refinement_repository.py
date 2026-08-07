@@ -143,6 +143,7 @@ class RefinementRepository:
                     priority=question["priority"],
                     question_text=question["question"],
                     why_text=question["why"],
+                    suggestions=question.get("suggestions", []),
                 )
             )
 

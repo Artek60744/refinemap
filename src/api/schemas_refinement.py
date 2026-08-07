@@ -30,6 +30,8 @@ class QuestionItem(StrictModel):
     priority: str
     question: str
     why: str
+    # Short candidate answers proposed by the model, offered as one-click chips.
+    suggestions: list[str] = Field(default_factory=list)
 
 
 class QuestionRoundModel(StrictModel):

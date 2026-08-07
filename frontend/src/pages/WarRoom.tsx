@@ -8,12 +8,6 @@ const LOGO_URL =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuCW8Ydnt1pjaSuuOkoaNpK1bp7aL7xVEgZAfXu4_neIosXkFUY8fo12xP_7XfMCd5zqMPdCevOiuoIYykQoU54l85QQLB-BZJSCDd_g3XlCDrD7CpUKO31N87WHuGyh0IDgl8VMQpqPoASztCeXDwjnvcgt6Z0dE5ejZxtDqgqdkEkxTfwH5Ptb1QeXYEj6veWO7sCIaJSw3dhJCH8ErNWSug3IN5wx5RNL-za3Oo-Oc_JJ8__8SL3-";
 
 const GRID_LABELS: Record<string, string> = { po: "PO", technique: "Technique", hybride: "Hybride" };
-const MODE_OPTIONS = [
-  { value: "auto", label: "Auto" },
-  { value: "po", label: "PO" },
-  { value: "technique", label: "Technique" },
-  { value: "hybride", label: "Hybride" },
-];
 
 // Full literal class names so Tailwind's scanner keeps them.
 const THEME_STYLES = [
@@ -135,8 +129,8 @@ export default function WarRoom() {
   const openCount = Math.max(questions.length - answeredCount, 0);
   const tensionCount = sessionSummary.risks.length;
   const clarity = clarityFromConfidence(sessionSummary.confidence, Boolean(deliverable));
-  const queue = questions.filter((q) => q.id !== activeQuestion?.id);
   const activeDraft = activeQuestion ? answers[activeQuestion.id] ?? "" : "";
+  const suggestions = activeQuestion?.suggestions ?? [];
 
   const suggestion =
     session.detectedGrid && session.detectedGrid !== session.grid && !suggestionDismissed
@@ -145,6 +139,16 @@ export default function WarRoom() {
 
   function setDraft(questionId: string, value: string) {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
+  }
+
+  // A chip fills an empty draft, and appends to an existing one so several can be combined.
+  function applySuggestion(questionId: string, suggestion: string) {
+    setAnswers((prev) => {
+      const current = (prev[questionId] ?? "").trim();
+      if (!current) return { ...prev, [questionId]: suggestion };
+      if (current.includes(suggestion)) return prev;
+      return { ...prev, [questionId]: `${current}, ${suggestion}` };
+    });
   }
 
   async function handleSetMode(mode: string) {
@@ -296,100 +300,65 @@ export default function WarRoom() {
         {/* ZONE 2: Decision War Room */}
         <main className="flex flex-1 flex-col overflow-y-auto bg-canvas-bg">
           <div className="mx-auto flex w-full max-w-[900px] flex-col gap-6 p-6">
-            {/* Mode override + suggestion */}
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-label-sm text-label-sm uppercase tracking-wider text-outline">
-                  Grille
-                </span>
-                {MODE_OPTIONS.map((option) => {
-                  const active = option.value === "auto" ? session.mode === "auto" : session.grid === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      disabled={switching}
-                      onClick={() => void handleSetMode(option.value)}
-                      className={`rounded-full border px-3 py-1 font-label-md text-label-md transition-colors disabled:opacity-50 ${
-                        active
-                          ? "border-primary bg-primary-container text-on-primary"
-                          : "border-border-subtle bg-surface text-on-surface-variant hover:bg-surface-container-low"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-                {switching && <span className="text-xs text-on-surface-variant">{t("common.loading")}</span>}
-              </div>
-
-              {suggestion && (
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-primary-fixed bg-primary-container/10 px-4 py-3">
-                  <div className="flex items-center gap-2 text-sm text-on-surface">
-                    <span className="material-symbols-outlined text-[18px] text-primary">lightbulb</span>
-                    Je pense que ce sujet est plutôt « {GRID_LABELS[suggestion] ?? suggestion} ». Passer en grille{" "}
-                    {GRID_LABELS[suggestion] ?? suggestion} ?
-                  </div>
-                  <div className="flex shrink-0 gap-2">
-                    <button
-                      type="button"
-                      disabled={switching}
-                      onClick={() => void handleSetMode(suggestion)}
-                      className="rounded bg-primary px-3 py-1.5 text-sm font-label-md text-on-primary hover:bg-primary-container disabled:opacity-50"
-                    >
-                      Confirmer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSuggestionDismissed(true)}
-                      className="rounded border border-border-subtle px-3 py-1.5 text-sm font-label-md text-on-surface-variant hover:bg-surface-container-low"
-                    >
-                      Refuser
-                    </button>
-                  </div>
+            {/* Grid suggestion */}
+            {suggestion && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-primary-fixed bg-primary-container/10 px-4 py-3">
+                <div className="flex items-center gap-2 text-sm text-on-surface">
+                  <span className="material-symbols-outlined text-[18px] text-primary">lightbulb</span>
+                  Je pense que ce sujet est plutôt « {GRID_LABELS[suggestion] ?? suggestion} ». Passer en grille{" "}
+                  {GRID_LABELS[suggestion] ?? suggestion} ?
                 </div>
-              )}
-            </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    disabled={switching}
+                    onClick={() => void handleSetMode(suggestion)}
+                    className="rounded bg-primary px-3 py-1.5 text-sm font-label-md text-on-primary hover:bg-primary-container disabled:opacity-50"
+                  >
+                    Confirmer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSuggestionDismissed(true)}
+                    className="rounded border border-border-subtle px-3 py-1.5 text-sm font-label-md text-on-surface-variant hover:bg-surface-container-low"
+                  >
+                    Refuser
+                  </button>
+                </div>
+              </div>
+            )}
 
-            {/* Metrics */}
-            <div className="flex items-center justify-between">
+            {/* Title + compact metrics */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <h1 className="flex items-center gap-3 font-headline-lg text-headline-lg text-on-surface">
                 <span className="material-symbols-outlined text-[32px] text-primary">analytics</span>
                 Decision War Room
               </h1>
-              <div className="flex gap-4">
-                <div className="flex min-w-[120px] flex-col rounded-lg border border-border-subtle bg-surface p-3">
-                  <span className="mb-1 font-label-sm uppercase text-on-surface-variant">Clarity Score</span>
-                  <div className="flex items-end gap-2">
-                    <span className={`font-display text-[28px] leading-none ${scoreColor(clarity)}`}>{clarity}</span>
-                    <span className="pb-1 text-sm text-on-surface-variant">/100</span>
-                  </div>
+              <div className="flex items-center divide-x divide-border-subtle rounded-full border border-border-subtle bg-surface px-1">
+                <div className="flex items-baseline gap-1.5 px-3 py-1">
+                  <span className="text-[11px] uppercase tracking-wider text-on-surface-variant">Clarity</span>
+                  <span className={`font-display text-[15px] leading-none ${scoreColor(clarity)}`}>{clarity}</span>
+                  <span className="text-[11px] text-on-surface-variant">/100</span>
                 </div>
-                <div className="flex min-w-[120px] flex-col rounded-lg border border-border-subtle bg-surface p-3">
-                  <span className="mb-1 font-label-sm uppercase text-on-surface-variant">Open Questions</span>
-                  <div className="flex items-end gap-2">
-                    <span
-                      className={`font-display text-[28px] leading-none ${
-                        openCount > 0 ? "text-score-alert" : "text-score-good"
-                      }`}
-                    >
-                      {openCount}
-                    </span>
-                    <span className="pb-1 text-sm text-on-surface-variant">critical</span>
-                  </div>
+                <div className="flex items-baseline gap-1.5 px-3 py-1">
+                  <span className="text-[11px] uppercase tracking-wider text-on-surface-variant">Open</span>
+                  <span
+                    className={`font-display text-[15px] leading-none ${
+                      openCount > 0 ? "text-score-alert" : "text-score-good"
+                    }`}
+                  >
+                    {openCount}
+                  </span>
                 </div>
-                <div className="flex min-w-[120px] flex-col rounded-lg border border-border-subtle bg-surface p-3">
-                  <span className="mb-1 font-label-sm uppercase text-on-surface-variant">Tension Areas</span>
-                  <div className="flex items-end gap-2">
-                    <span
-                      className={`font-display text-[28px] leading-none ${
-                        tensionCount > 0 ? "text-score-warn" : "text-score-good"
-                      }`}
-                    >
-                      {tensionCount}
-                    </span>
-                    <span className="pb-1 text-sm text-on-surface-variant">conflicts</span>
-                  </div>
+                <div className="flex items-baseline gap-1.5 px-3 py-1">
+                  <span className="text-[11px] uppercase tracking-wider text-on-surface-variant">Tensions</span>
+                  <span
+                    className={`font-display text-[15px] leading-none ${
+                      tensionCount > 0 ? "text-score-warn" : "text-score-good"
+                    }`}
+                  >
+                    {tensionCount}
+                  </span>
                 </div>
               </div>
             </div>
@@ -402,7 +371,7 @@ export default function WarRoom() {
 
             {/* Active Focus Card */}
             {activeQuestion ? (
-              <div className="flex flex-col overflow-hidden rounded-xl border border-primary-fixed bg-surface shadow-sm">
+              <div className="flex min-h-[500px] flex-1 flex-col overflow-hidden rounded-xl border border-primary-fixed bg-surface shadow-sm">
                 <div className="flex items-center justify-between border-b border-primary-fixed bg-primary-container/10 px-6 py-4">
                   <div className="flex items-center gap-3">
                     <div className="h-3 w-3 rounded-full bg-node-pink"></div>
@@ -414,76 +383,87 @@ export default function WarRoom() {
                     {t("session.round")} {session.round}/{session.maxRounds} · {label("status", session.status)}
                   </span>
                 </div>
-                <div className="grid grid-cols-1 gap-8 p-6 md:grid-cols-2">
-                  <div className="flex flex-col gap-4">
-                    <div>
-                      <h2 className="mb-2 font-headline-md text-on-surface">{activeQuestion.theme}</h2>
-                      <p className="font-body-md text-on-surface-variant">{activeQuestion.question}</p>
-                    </div>
-                    {tensionCount > 0 && (
-                      <div className="mt-auto rounded-lg border border-error-container bg-error-container/30 p-4">
-                        <div className="mb-2 flex items-center gap-2 font-label-md text-error">
-                          <span className="material-symbols-outlined text-[18px]">warning</span>
-                          Critical Tension Detected
+                <div className="flex h-full flex-col gap-6 p-6">
+                  {/* Chat area */}
+                  <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4">
+                    <div className="flex min-h-[240px] flex-1 flex-col gap-6 overflow-y-auto rounded-lg border border-border-subtle bg-surface-container-lowest p-6">
+                      <div className="flex justify-start">
+                        <div className="max-w-[75%] rounded-xl rounded-tl-none border border-border-subtle bg-surface-container p-4 text-on-surface">
+                          <p className="font-body-md text-body-lg">{activeQuestion.question}</p>
                         </div>
-                        <p className="text-sm text-on-surface-variant">{sessionSummary.risks[0]}</p>
                       </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-4">
-                    <div className="flex min-h-[160px] flex-col gap-3 overflow-y-auto rounded-lg border border-border-subtle bg-surface-container-lowest p-4">
-                      {activeQuestion.why && (
-                        <div className="flex justify-start">
-                          <div className="max-w-[90%] rounded-lg rounded-tl-none border border-border-subtle bg-surface-container p-3 text-on-surface">
-                            <p className="font-body-md text-sm text-body-md">{activeQuestion.why}</p>
-                          </div>
-                        </div>
-                      )}
                       {activeDraft.trim() && (
                         <div className="flex justify-end">
-                          <div className="max-w-[90%] rounded-lg rounded-tr-none bg-primary-container p-3 text-on-primary shadow-sm">
-                            <p className="font-body-md text-body-md">{activeDraft}</p>
+                          <div className="max-w-[75%] rounded-xl rounded-tr-none bg-primary-container p-4 text-on-primary shadow-sm">
+                            <p className="font-body-md text-body-lg">{activeDraft}</p>
                           </div>
                         </div>
                       )}
                     </div>
-                    <div className="relative flex items-end gap-2">
-                      <textarea
-                        value={activeDraft}
-                        onChange={(e) => setDraft(activeQuestion.id, e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                            e.preventDefault();
-                            handleSend();
-                          }
-                        }}
-                        placeholder="Réponds à cette question..."
-                        className="min-h-[80px] w-full resize-none rounded-lg border border-border-subtle bg-surface-container-lowest p-3 font-body-md text-body-md focus:border-primary focus:ring-1 focus:ring-primary"
-                      />
-                      <div className="absolute bottom-3 right-3 flex gap-2">
+
+                    <div className="mt-auto flex flex-col gap-3">
+                      {/* Model-proposed answers */}
+                      {suggestions.length > 0 && (
+                        <div className="flex flex-wrap justify-center gap-3">
+                          {suggestions.map((suggestion) => {
+                            const picked = activeDraft.includes(suggestion);
+                            return (
+                              <button
+                                type="button"
+                                key={suggestion}
+                                onClick={() => applySuggestion(activeQuestion.id, suggestion)}
+                                className={`cursor-pointer rounded-full border-2 border-primary px-5 py-2.5 font-label-md text-sm font-bold shadow-sm transition-colors ${
+                                  picked
+                                    ? "bg-primary text-on-primary"
+                                    : "bg-surface text-primary hover:bg-primary/5"
+                                }`}
+                              >
+                                {suggestion}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <div className="relative flex items-end gap-2">
+                        <textarea
+                          value={activeDraft}
+                          onChange={(e) => setDraft(activeQuestion.id, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                              e.preventDefault();
+                              handleSend();
+                            }
+                          }}
+                          placeholder="Réponds à cette question..."
+                          className="min-h-[80px] w-full resize-none rounded-lg border border-border-subtle bg-surface-container-lowest p-3 font-body-md text-body-md focus:border-primary focus:ring-1 focus:ring-primary"
+                        />
+                        <div className="absolute bottom-3 right-3 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleSend}
+                            disabled={submitting || !activeDraft.trim()}
+                            className="flex h-8 w-8 items-center justify-center rounded border-0 bg-primary text-on-primary shadow-sm transition-colors hover:bg-primary-container disabled:opacity-40"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">send</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="font-label-sm text-outline">
+                          {answeredCount}/{questions.length} resolved
+                        </span>
                         <button
                           type="button"
-                          onClick={handleSend}
-                          disabled={submitting || !activeDraft.trim()}
-                          className="flex h-8 w-8 items-center justify-center rounded border-0 bg-primary text-on-primary shadow-sm transition-colors hover:bg-primary-container disabled:opacity-40"
+                          onClick={() => void submitRound()}
+                          disabled={submitting || answeredCount === 0}
+                          className="flex items-center gap-2 rounded border-0 bg-primary-container px-4 py-1.5 font-label-md text-label-md text-on-primary transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
                         >
-                          <span className="material-symbols-outlined text-[18px]">send</span>
+                          <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+                          {submitting ? t("common.loading") : "Valider le tour"}
                         </button>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-label-sm text-outline">
-                        {answeredCount}/{questions.length} resolved
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => void submitRound()}
-                        disabled={submitting || answeredCount === 0}
-                        className="flex items-center gap-2 rounded border-0 bg-primary-container px-4 py-1.5 font-label-md text-label-md text-on-primary transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
-                        {submitting ? t("common.loading") : "Valider le tour"}
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -497,37 +477,6 @@ export default function WarRoom() {
                 <p className="mt-1 text-sm text-on-surface-variant">
                   {deliverable ? "Le livrable à droite est prêt à être exporté." : sessionSummary.reason}
                 </p>
-              </div>
-            )}
-
-            {/* Next in Queue */}
-            {queue.length > 0 && (
-              <div className="mt-4 flex flex-col gap-3">
-                <h3 className="mb-2 font-label-md uppercase tracking-wider text-on-surface-variant">
-                  Next in Queue
-                </h3>
-                {queue.map((question) => {
-                  const isAnswered = (answers[question.id] ?? "").trim().length > 0;
-                  return (
-                    <button
-                      type="button"
-                      key={question.id}
-                      onClick={() => setActiveId(question.id)}
-                      className="flex items-center justify-between rounded-lg border border-border-subtle bg-surface p-4 text-left opacity-70 transition-shadow hover:opacity-100 hover:shadow-md"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div
-                          className={`h-2 w-2 rounded-full ${isAnswered ? "bg-score-good" : "bg-node-yellow"}`}
-                        ></div>
-                        <div>
-                          <h4 className="font-label-md text-base text-on-surface">{question.theme}</h4>
-                          <p className="font-body-md text-sm text-on-surface-variant">{question.question}</p>
-                        </div>
-                      </div>
-                      <span className="material-symbols-outlined text-on-surface-variant">chevron_right</span>
-                    </button>
-                  );
-                })}
               </div>
             )}
           </div>

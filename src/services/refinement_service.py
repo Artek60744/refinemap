@@ -243,20 +243,34 @@ class RefinementService:
         if session.summaries:
             latest_summary = max(session.summaries, key=lambda item: item.round_number)
 
+        # The LLM must not have to join questions and answers itself: build the pairs here.
+        answer_by_question_id = {answer.question_id: answer.answer_text for answer in session.answers}
+
         asked_questions: list[dict[str, Any]] = []
-        for round_model in session.question_rounds:
+        answers_payload: list[dict[str, Any]] = []
+        for round_model in sorted(session.question_rounds, key=lambda item: item.round_number):
             for question in round_model.questions:
+                answer_text = answer_by_question_id.get(question.id)
                 asked_questions.append(
                     {
                         "id": question.external_id,
+                        "round": round_model.round_number,
                         "theme": question.theme,
                         "question": question.question_text,
+                        "answered": answer_text is not None,
                     }
                 )
-
-        answers_payload = []
-        for answer in session.answers:
-            answers_payload.append({"questionId": answer.question.external_id, "answer": answer.answer_text})
+                if answer_text is None:
+                    continue
+                answers_payload.append(
+                    {
+                        "questionId": question.external_id,
+                        "round": round_model.round_number,
+                        "theme": question.theme,
+                        "question": question.question_text,
+                        "answer": answer_text,
+                    }
+                )
 
         return {
             "workflow_action": workflow_action,
@@ -318,6 +332,7 @@ class RefinementService:
                     priority=question.priority,
                     question=question.question_text,
                     why=question.why_text,
+                    suggestions=question.suggestions or [],
                 )
                 for question in question_round.questions
             ],

@@ -125,6 +125,8 @@ class Question(Base):
     priority = Column(String(32), nullable=False)
     question_text = Column(Text, nullable=False)
     why_text = Column(Text, nullable=False)
+    # Nullable: rows created before suggestions existed keep NULL.
+    suggestions = Column(JSON, nullable=True, default=list)
     created_at = Column(DateTime(timezone=True), nullable=False, default=now_utc)
 
     round = relationship("QuestionRound", back_populates="questions")

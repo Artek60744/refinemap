@@ -65,6 +65,10 @@ class MockRefinementLLM:
         max_questions = int(context.get("max_questions_per_round", 6))
         round_number = int(context.get("round", 0)) + 1
 
+        # Offline engine: it cannot infer plausible answers, so it only offers the two
+        # utility chips (the first one is understood by `_looks_unknown` downstream).
+        fallback_suggestions = ["Je ne sais pas encore", "Sans objet pour ce sujet"]
+
         questions: list[QuestionItem] = []
         if round_number == 1:
             for index, axis in enumerate(axes):
@@ -78,6 +82,7 @@ class MockRefinementLLM:
                         priority=priority,
                         question=f"À propos de « {axis['label']} » : quel est l'élément clé à clarifier pour ce sujet ?",
                         why=f"Clarifier « {axis['label']} » réduit l'ambiguïté avant de rédiger le livrable.",
+                        suggestions=fallback_suggestions,
                     )
                 )
         else:
@@ -90,6 +95,7 @@ class MockRefinementLLM:
                         priority="medium",
                         question=f"Peux-tu préciser : {unknown}",
                         why="Cette zone reste floue et peut changer le livrable.",
+                        suggestions=fallback_suggestions,
                     )
                 )
             if not questions:
@@ -100,6 +106,7 @@ class MockRefinementLLM:
                         priority="medium",
                         question="Reste-t-il un point à trancher avant de figer le livrable ?",
                         why="Confirmer qu'il n'y a plus d'ambiguïté bloquante.",
+                        suggestions=fallback_suggestions,
                     )
                 )
 
