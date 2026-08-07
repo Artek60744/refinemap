@@ -294,6 +294,9 @@ class OpenAICompatibleLLM:
         # Deterministic safety net: if a real call fails (network, truncated/invalid
         # JSON, schema mismatch), degrade to the offline engine instead of a 500.
         self._fallback = MockRefinementLLM(model_name=self.model_name)
+        # True as soon as one call in this request degraded to the offline engine,
+        # so the API can tell the UI instead of silently serving template questions.
+        self.degraded = False
 
     @property
     def _is_azure(self) -> bool:
@@ -321,7 +324,8 @@ class OpenAICompatibleLLM:
         user = (
             f"{task_prompt}\n\nCONTEXT (JSON):\n"
             f"{json.dumps(context, ensure_ascii=False)}\n\n"
-            "Return a single strict JSON object only, no prose, no code fences."
+            "Return a single strict JSON object only, no prose, no code fences. "
+            'Inside string values, never use unescaped double quotes — write « » or \\" instead.'
         )
         body: dict[str, Any] = {
             "messages": [
@@ -334,13 +338,45 @@ class OpenAICompatibleLLM:
         }
         if not self._is_azure:
             body["model"] = self.model
+        # DeepSeek's thinking-capable models (deepseek-v4-*) reason by default, and the
+        # reasoning tokens count against max_tokens — on large contexts they can exhaust
+        # the budget and leave `content` empty, which degrades the whole round to the
+        # offline fallback. Curb the effort so reasoning stays short and content is always
+        # emitted. (temperature is silently ignored while thinking is enabled.)
+        if self.provider == "deepseek":
+            body["reasoning_effort"] = "low"
 
         async with httpx.AsyncClient(timeout=90.0) as client:
             response = await client.post(self._url(), headers=self._headers(), json=body)
             response.raise_for_status()
             payload = response.json()
         content = payload["choices"][0]["message"]["content"]
-        return _extract_json(content)
+
+        try:
+            return _extract_json(content)
+        except json.JSONDecodeError as exc:
+            # One corrective retry: the model already produced the right content, it
+            # only broke the encoding — asking it to re-emit valid JSON usually saves
+            # the round instead of dropping to the offline fallback.
+            logger.warning("Invalid JSON from %s (%s); asking the model to re-emit it.", self.model_name, exc)
+            body["messages"] = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user},
+                {"role": "assistant", "content": content},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Your previous response is not valid JSON ({exc}). Re-emit the exact same content "
+                        'as ONE valid JSON object. Escape every double quote inside string values as \\" '
+                        "(or replace it with « »). No prose, no code fences."
+                    ),
+                },
+            ]
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                response = await client.post(self._url(), headers=self._headers(), json=body)
+                response.raise_for_status()
+                payload = response.json()
+            return _extract_json(payload["choices"][0]["message"]["content"])
 
     def _system(self) -> str:
         return self.prompt_loader.load("system-refinement")
@@ -351,6 +387,7 @@ class OpenAICompatibleLLM:
             return DetectModeOutput.model_validate(data)
         except Exception as exc:
             logger.warning("detect_mode via %s failed (%s); using offline fallback.", self.model_name, exc)
+            self.degraded = True
             return await self._fallback.detect_mode(context)
 
     async def generate_questions(self, context: dict[str, Any]) -> GenerateQuestionsOutput:
@@ -359,6 +396,7 @@ class OpenAICompatibleLLM:
             return GenerateQuestionsOutput.model_validate(data)
         except Exception as exc:
             logger.warning("generate_questions via %s failed (%s); using offline fallback.", self.model_name, exc)
+            self.degraded = True
             return await self._fallback.generate_questions(context)
 
     async def summarize_context(self, context: dict[str, Any]) -> SessionSummaryOutput:
@@ -367,6 +405,7 @@ class OpenAICompatibleLLM:
             return SessionSummaryOutput.model_validate(data)
         except Exception as exc:
             logger.warning("summarize_context via %s failed (%s); using offline fallback.", self.model_name, exc)
+            self.degraded = True
             return await self._fallback.summarize_context(context)
 
     async def generate_final_refinement(self, context: dict[str, Any]) -> RefinementDeliverableOutput:
@@ -380,6 +419,7 @@ class OpenAICompatibleLLM:
             return RefinementDeliverableOutput.model_validate(data)
         except Exception as exc:
             logger.warning("generate_final_refinement via %s failed (%s); using offline fallback.", self.model_name, exc)
+            self.degraded = True
             return await self._fallback.generate_final_refinement(context)
 
 

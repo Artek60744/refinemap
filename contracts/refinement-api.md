@@ -329,7 +329,49 @@ Response type:
 
 `text/markdown`
 
-## 9. Error shape
+## 9. Session history
+
+### List sessions
+
+`GET /api/refinement/sessions?q=<title fragment>&status=<STATUS>&limit=20&offset=0`
+
+All parameters are optional. `q` matches the session title, case-insensitively. `status` is one
+of `DRAFT`, `QUESTIONING`, `ANALYZING`, `FINAL_READY`. Sessions are scoped to the local user and
+sorted by most recently updated first.
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "title": "Deliver the Android app to testers",
+      "status": "FINAL_READY",
+      "grid": "technique",
+      "mode": "technique",
+      "round": 2,
+      "maxRounds": 3,
+      "createdAt": "2026-08-07T13:53:49Z",
+      "updatedAt": "2026-08-07T14:02:11Z",
+      "completedAt": "2026-08-07T14:02:11Z"
+    }
+  ],
+  "total": 20,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+### Rename a session
+
+`PATCH /api/refinement/sessions/{session_id}` with `{"title": "New title"}` → the updated list
+item. A blank title is rejected with `400`.
+
+### Delete a session
+
+`DELETE /api/refinement/sessions/{session_id}` → `204 No Content`. Rounds, questions, answers,
+snapshots, summaries and artifacts of that session are deleted with it.
+
+## 10. Error shape
 
 ```json
 {
@@ -344,7 +386,7 @@ Response type:
 }
 ```
 
-## 10. Internal abstractions
+## 11. Internal abstractions
 
 ```python
 class WorkItemProvider(Protocol):

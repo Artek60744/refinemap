@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     deepseek_endpoint: str = "https://api.deepseek.com"
 
     refinement_max_rounds: int = 3
+    # Rounds to run before enoughContext may end the session; capped by max_rounds.
+    refinement_min_rounds: int = 2
     refinement_max_questions_per_round: int = 6
     refinement_export_enabled: bool = True
 

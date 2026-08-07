@@ -18,11 +18,14 @@ export const MESSAGES: Record<string, [en: string, fr: string]> = {
     "Transforme un sujet flou en brief clair.",
   ],
   "nav.refinement": ["Refinement", "Refinement"],
+  "nav.dashboard": ["Dashboard", "Dashboard"],
+  "nav.history": ["History", "Historique"],
   "nav.settings": ["Settings", "Paramètres"],
   "nav.health": ["Health", "Santé"],
   // --- shared --------------------------------------------------------------
   "common.test": ["Test", "Tester"],
   "common.save": ["Save", "Sauvegarder"],
+  "common.cancel": ["Cancel", "Annuler"],
   "common.loading": ["Loading...", "Chargement..."],
   // --- settings page -------------------------------------------------------
   "settings.title": ["Connections and runtime", "Connexions et runtime"],
@@ -84,6 +87,28 @@ export const MESSAGES: Record<string, [en: string, fr: string]> = {
     "The deliverable is not available for this session yet.",
     "Le livrable n'est pas encore disponible pour cette session.",
   ],
+  // --- history page --------------------------------------------------------
+  "history.title": ["History", "Historique"],
+  "history.subtitle": [
+    "Every refinement session, most recently updated first.",
+    "Toutes les sessions de refinement, la plus récemment modifiée en premier.",
+  ],
+  "history.search_placeholder": ["Search by title...", "Rechercher par titre..."],
+  "history.filter_all": ["All", "Toutes"],
+  "history.untitled": ["Untitled session", "Session sans titre"],
+  "history.empty": [
+    "No session yet. Start one from the dashboard.",
+    "Aucune session pour l'instant. Lances-en une depuis le dashboard.",
+  ],
+  "history.empty_filtered": [
+    "No session matches these filters.",
+    "Aucune session ne correspond à ces filtres.",
+  ],
+  "history.resume": ["Open", "Ouvrir"],
+  "history.rename": ["Rename", "Renommer"],
+  "history.delete": ["Delete", "Supprimer"],
+  "history.delete_confirm": ["Confirm deletion", "Confirmer la suppression"],
+  "history.load_more": ["Load more ({count})", "Voir plus ({count})"],
   // --- enum labels rendered from stored values -----------------------------
   "status.draft": ["Draft", "Brouillon"],
   "status.questioning": ["Questioning", "Questions en cours"],

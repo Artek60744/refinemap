@@ -108,6 +108,46 @@ class RefinementRepository:
         self.db.commit()
         self.db.refresh(session)
 
+    def list_sessions(
+        self,
+        user_id: str,
+        *,
+        query: str | None = None,
+        status: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[RefinementSession], int]:
+        """One page of the user's sessions, most recently touched first, plus the total."""
+        filters = [RefinementSession.user_id == user_id]
+        if query:
+            # ilike compiles to lower() LIKE lower() on SQLite, so this stays portable.
+            filters.append(RefinementSession.subject_title.ilike(f"%{query}%"))
+        if status:
+            filters.append(RefinementSession.status == status)
+
+        total = self.db.execute(
+            select(func.count()).select_from(RefinementSession).where(*filters)
+        ).scalar_one()
+        stmt = (
+            select(RefinementSession)
+            .where(*filters)
+            .order_by(RefinementSession.updated_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(self.db.execute(stmt).scalars().all()), total
+
+    def delete_session(self, session: RefinementSession) -> None:
+        """Children (rounds, questions, answers, snapshots, summaries, artifacts) go with it:
+        every relationship is declared cascade="all, delete-orphan"."""
+        self.db.delete(session)
+        self.db.commit()
+
+    def rename_session(self, session: RefinementSession, title: str) -> None:
+        session.subject_title = title
+        self.db.commit()
+        self.db.refresh(session)
+
     def get_session(self, session_id: str) -> RefinementSession | None:
         stmt = (
             select(RefinementSession)

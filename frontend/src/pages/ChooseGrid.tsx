@@ -53,7 +53,9 @@ export default function ChooseGrid() {
     setError(null);
     try {
       const response = await createSession({ objective, mode });
-      navigate(`/refinement/sessions/${response.session.id}`);
+      navigate(`/refinement/sessions/${response.session.id}`, {
+        state: { degraded: response.degraded },
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : t("home.session_create_failed"));
       setPending(null);
@@ -117,14 +119,14 @@ export default function ChooseGrid() {
                       isPending ? "bg-primary text-on-primary" : "bg-primary-container/15 text-primary"
                     }`}
                   >
-                    <span className="material-symbols-outlined text-[24px]">
+                    <span className={`material-symbols-outlined text-[24px] ${isPending ? "animate-spin" : ""}`}>
                       {isPending ? "progress_activity" : card.icon}
                     </span>
                   </span>
                   <h2 className="font-headline-md text-lg leading-tight text-on-surface">{card.title}</h2>
                   <p className="font-body-md text-sm text-on-surface-variant">{card.description}</p>
                   <span className="mt-2 inline-flex items-center gap-1 font-label-md text-label-md text-primary">
-                    {isPending ? t("common.loading") : "Lancer le refinement"}
+                    {isPending ? "Génération des premières questions…" : "Lancer le refinement"}
                     {!isPending && <span className="material-symbols-outlined text-[16px]">arrow_forward</span>}
                   </span>
                 </button>

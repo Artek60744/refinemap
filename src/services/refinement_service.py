@@ -8,12 +8,15 @@ from sqlalchemy.orm import Session
 
 from src.agents.refinement_workflow import create_initial_state, create_refinement_graph
 from src.api.schemas_refinement import (
+    AnswerHistoryItem,
     CreateSessionRequest,
     DecisionModel,
     QuestionItem,
     QuestionRoundModel,
     RefinementDeliverable,
     SessionDetailResponse,
+    SessionListItem,
+    SessionListResponse,
     SessionModel,
     SessionSummaryModel,
     StartSessionResponse,
@@ -50,12 +53,16 @@ class RefinementService:
         mode = normalize_mode(request.mode)
         subject = self._synthesize_subject(objective)
 
-        detected = await self._detect_grid(llm, subject, request.extraContext)
         if mode == "auto":
-            grid = detected
+            grid = await self._detect_grid(llm, subject, request.extraContext)
             detected_grid = None
         else:
+            # Manual grid: the LLM round-trip is not worth it just for the suggestion
+            # banner — keyword detection is instant and good enough there.
             grid = resolve_grid(mode)
+            detected = detect_grid_by_keywords(
+                " ".join([subject.get("title", ""), subject.get("description", ""), request.extraContext])
+            )
             detected_grid = detected if detected != grid else None
         subject["mode"] = mode
         subject["grid"] = grid
@@ -83,6 +90,7 @@ class RefinementService:
             session=self._to_session_model(refreshed),
             questionRound=self._to_question_round_model(question_round),
             sessionSummary=self._to_summary_model(repo.latest_summary(refreshed)),
+            degraded=getattr(llm, "degraded", False),
         )
 
     async def set_mode(self, db: Session, session_id: str, mode: str) -> SessionDetailResponse:
@@ -116,6 +124,7 @@ class RefinementService:
             mode=subject.get("mode", "auto"),
             grid=grid,
             extra_context=session.extra_context or "",
+            min_rounds=settings.refinement_min_rounds,
             max_rounds=session.max_rounds,
             max_questions_per_round=session.max_questions_per_round,
         )
@@ -137,6 +146,48 @@ class RefinementService:
         repo.add_summary(repo.get_session(session_id), derived_summary, round_number=0)
         return question_round
 
+    def list_sessions(
+        self,
+        db: Session,
+        *,
+        query: str | None = None,
+        status: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> SessionListResponse:
+        repo = RefinementRepository(db)
+        user = repo.ensure_local_user(settings.default_user_email, settings.default_user_name)
+        sessions, total = repo.list_sessions(
+            user.id, query=query, status=status, limit=limit, offset=offset
+        )
+        return SessionListResponse(
+            items=[self._to_session_list_item(session) for session in sessions],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    def rename_session(self, db: Session, session_id: str, title: str) -> SessionListItem:
+        clean = title.strip()
+        if not clean:
+            raise ValueError("Provide a title.")
+        repo = RefinementRepository(db)
+        session = self._owned_session(repo, session_id)
+        repo.rename_session(session, clean[:512])
+        return self._to_session_list_item(session)
+
+    def delete_session(self, db: Session, session_id: str) -> None:
+        repo = RefinementRepository(db)
+        repo.delete_session(self._owned_session(repo, session_id))
+
+    def _owned_session(self, repo: RefinementRepository, session_id: str):
+        """Unknown and not-mine collapse into the same 404: no existence leak."""
+        user = repo.ensure_local_user(settings.default_user_email, settings.default_user_name)
+        session = repo.get_session(session_id)
+        if session is None or session.user_id != user.id:
+            raise KeyError(f"Session not found: {session_id}")
+        return session
+
     async def get_session(self, db: Session, session_id: str) -> SessionDetailResponse:
         repo = RefinementRepository(db)
         session = repo.get_session(session_id)
@@ -147,10 +198,25 @@ class RefinementService:
         current_round = repo.get_current_round(session)
         final_artifact = repo.latest_final_artifact(session)
 
+        sorted_rounds = sorted(session.question_rounds, key=lambda item: item.round_number)
+        answer_by_question_id = {answer.question_id: answer.answer_text for answer in session.answers}
+        answer_history = [
+            AnswerHistoryItem(
+                questionId=question.external_id,
+                round=round_model.round_number,
+                answer=answer_by_question_id[question.id],
+            )
+            for round_model in sorted_rounds
+            for question in round_model.questions
+            if question.id in answer_by_question_id
+        ]
+
         return SessionDetailResponse(
             session=self._to_session_model(session),
             subject=self._to_subject_model(session),
             currentQuestionRound=self._to_question_round_model(current_round) if current_round else None,
+            questionRounds=[self._to_question_round_model(round_model) for round_model in sorted_rounds],
+            answers=answer_history,
             sessionSummary=self._to_summary_model(summary),
             deliverable=RefinementDeliverable.model_validate(final_artifact.payload) if final_artifact else None,
         )
@@ -165,7 +231,7 @@ class RefinementService:
         reloaded = repo.get_session(session_id)
         assert reloaded is not None
 
-        _llm, graph, _runtime = self._build_runtime_components(db)
+        llm, graph, _runtime = self._build_runtime_components(db)
         state = self._build_state_from_session(reloaded, workflow_action="answers_submitted")
         result = await graph.ainvoke(state, config={"configurable": {"thread_id": session_id}})
 
@@ -199,6 +265,7 @@ class RefinementService:
             questionRound=question_round_model,
             sessionSummary=self._to_summary_model(summary),
             deliverable=deliverable_model,
+            degraded=getattr(llm, "degraded", False),
         )
 
     async def export_markdown(self, db: Session, session_id: str) -> str:
@@ -281,6 +348,7 @@ class RefinementService:
             "grid": session.grid,
             "extra_context": session.extra_context or "",
             "round": session.round,
+            "min_rounds": settings.refinement_min_rounds,
             "max_rounds": session.max_rounds,
             "max_questions_per_round": session.max_questions_per_round,
             "asked_questions": asked_questions,
@@ -305,6 +373,20 @@ class RefinementService:
             grid=session.grid,
             detectedGrid=session.detected_grid,
             createdAt=session.created_at,
+        )
+
+    def _to_session_list_item(self, session) -> SessionListItem:
+        return SessionListItem(
+            id=session.id,
+            title=session.subject_title or "",
+            status=session.status,
+            grid=session.grid,
+            mode=session.mode,
+            round=session.round,
+            maxRounds=session.max_rounds,
+            createdAt=session.created_at,
+            updatedAt=session.updated_at,
+            completedAt=session.completed_at,
         )
 
     def _to_subject_model(self, session) -> SubjectModel:

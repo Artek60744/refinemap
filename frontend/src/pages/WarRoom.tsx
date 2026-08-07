@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { exportUrl, getSession, setSessionMode, submitAnswers } from "../api/refinement";
+import { GRID_LABELS } from "../constants/grids";
 import { useI18n } from "../i18n";
-import type { QuestionItem, SessionDetailResponse } from "../types/api";
+import type { QuestionItem, QuestionRoundModel, SessionDetailResponse } from "../types/api";
 
 const LOGO_URL =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuCW8Ydnt1pjaSuuOkoaNpK1bp7aL7xVEgZAfXu4_neIosXkFUY8fo12xP_7XfMCd5zqMPdCevOiuoIYykQoU54l85QQLB-BZJSCDd_g3XlCDrD7CpUKO31N87WHuGyh0IDgl8VMQpqPoASztCeXDwjnvcgt6Z0dE5ejZxtDqgqdkEkxTfwH5Ptb1QeXYEj6veWO7sCIaJSw3dhJCH8ErNWSug3IN5wx5RNL-za3Oo-Oc_JJ8__8SL3-";
-
-const GRID_LABELS: Record<string, string> = { po: "PO", technique: "Technique", hybride: "Hybride" };
 
 // Full literal class names so Tailwind's scanner keeps them.
 const THEME_STYLES = [
@@ -18,26 +17,72 @@ const THEME_STYLES = [
   { text: "text-node-yellow", bg: "bg-node-yellow", border: "border-node-yellow", icon: "verified" },
 ] as const;
 
+// One question of one round, with everything the sidebar and the chat need.
+interface QuestionEntry {
+  key: string;
+  round: number;
+  inOpenRound: boolean;
+  question: QuestionItem;
+  answer: string | null;
+}
+
 interface ThemeGroup {
   theme: string;
   style: (typeof THEME_STYLES)[number];
-  questions: QuestionItem[];
+  entries: QuestionEntry[];
 }
 
-function groupByTheme(questions: QuestionItem[]): ThemeGroup[] {
+// The grid axis a question belongs to. `theme` is a free string on the wire, so the
+// sidebar, the filter and the chat must all derive the axis the exact same way.
+function themeKey(question: QuestionItem): string {
+  return question.theme?.trim() || "Refinement";
+}
+
+function groupByTheme(entries: QuestionEntry[]): ThemeGroup[] {
   const groups: ThemeGroup[] = [];
   const index = new Map<string, ThemeGroup>();
-  for (const question of questions) {
-    const theme = question.theme?.trim() || "Refinement";
+  for (const entry of entries) {
+    const theme = themeKey(entry.question);
     let group = index.get(theme);
     if (!group) {
-      group = { theme, style: THEME_STYLES[groups.length % THEME_STYLES.length], questions: [] };
+      group = { theme, style: THEME_STYLES[groups.length % THEME_STYLES.length], entries: [] };
       index.set(theme, group);
       groups.push(group);
     }
-    group.questions.push(question);
+    group.entries.push(entry);
   }
   return groups;
+}
+
+// Chat order for the open round: the exchanges already validated, oldest answer first,
+// then the question currently in the composer. The server order would put a freshly
+// picked question above answers given before it.
+// `includePending` keeps the axis questions still untouched at the end — the filtered
+// view shows a whole axis, where the chronological view only reveals the active one.
+function openRoundOrder(
+  questions: QuestionItem[],
+  sent: Record<string, string>,
+  activeId: string | null,
+  includePending = false,
+): QuestionItem[] {
+  const pending = new Map(questions.map((q) => [q.id, q]));
+  const ordered: QuestionItem[] = [];
+  for (const id of Object.keys(sent)) {
+    const question = pending.get(id);
+    if (question) {
+      ordered.push(question);
+      pending.delete(id);
+    }
+  }
+  // A whole axis keeps the server order for what is still open, so activating a question
+  // highlights it in place instead of pulling it to the top of the thread.
+  if (includePending) {
+    ordered.push(...pending.values());
+    return ordered;
+  }
+  const active = activeId ? pending.get(activeId) : undefined;
+  if (active) ordered.push(active);
+  return ordered;
 }
 
 function clarityFromConfidence(confidence: string, hasFinal: boolean): number {
@@ -60,22 +105,63 @@ function scoreColor(value: number): string {
   return "text-score-alert";
 }
 
+function TypingIndicator({ label }: { label: string }) {
+  return (
+    <div className="flex justify-start">
+      <div className="flex items-center gap-3 rounded-xl rounded-tl-none border border-border-subtle bg-surface-container px-4 py-3">
+        <span className="flex gap-1">
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className="h-2 w-2 animate-bounce rounded-full bg-primary/70"
+              style={{ animationDelay: `${i * 160}ms` }}
+            />
+          ))}
+        </span>
+        <span className="text-sm text-on-surface-variant">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+function RoundDivider({ round }: { round: number }) {
+  return (
+    <div className="flex items-center gap-3 py-1">
+      <div className="h-px flex-1 bg-border-subtle" />
+      <span className="rounded-full border border-border-subtle bg-surface px-3 py-0.5 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+        Tour {round}
+      </span>
+      <div className="h-px flex-1 bg-border-subtle" />
+    </div>
+  );
+}
+
 type Tab = "brief" | "plan" | "code";
 
 export default function WarRoom() {
   const { sessionId = "" } = useParams();
   const { t, label } = useI18n();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [detail, setDetail] = useState<SessionDetailResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  // Answers validated locally for the open round, before the round is submitted.
+  const [sent, setSent] = useState<Record<string, string>>({});
+  const [draft, setDraft] = useState("");
+  // User-picked question of the open round; falls back to the first unanswered one.
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Grid axis the chat is narrowed to; null = the whole chronological thread.
+  const [themeFilter, setThemeFilter] = useState<string | null>(null);
+  const [degraded, setDegraded] = useState<boolean>(
+    Boolean((location.state as { degraded?: boolean } | null)?.degraded),
+  );
   const [submitting, setSubmitting] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const [tab, setTab] = useState<Tab>("brief");
+  const chatRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,16 +179,88 @@ export default function WarRoom() {
     };
   }, [sessionId]);
 
-  const roundId = detail?.currentQuestionRound?.id ?? null;
-  const questions = useMemo(
-    () => detail?.currentQuestionRound?.questions ?? [],
+  const openRoundId = detail?.currentQuestionRound?.id ?? null;
+  const rounds: QuestionRoundModel[] = useMemo(() => {
+    if (!detail) return [];
+    if (detail.questionRounds.length > 0) return detail.questionRounds;
+    return detail.currentQuestionRound ? [detail.currentQuestionRound] : [];
+  }, [detail]);
+
+  const serverAnswers = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of detail?.answers ?? []) {
+      map.set(`${item.round}:${item.questionId}`, item.answer);
+    }
+    return map;
+  }, [detail?.answers]);
+
+  // New round arriving from the server: the local buffer belongs to the old round.
+  useEffect(() => {
+    setSent({});
+    setDraft("");
+    setActiveId(null);
+    setThemeFilter(null);
+  }, [openRoundId]);
+
+  const entries: QuestionEntry[] = useMemo(() => {
+    const list: QuestionEntry[] = [];
+    for (const round of rounds) {
+      const inOpenRound = round.id === openRoundId;
+      for (const question of round.questions) {
+        const local = inOpenRound ? sent[question.id] : undefined;
+        const server = serverAnswers.get(`${round.round}:${question.id}`);
+        const answer = local ?? server ?? null;
+        list.push({
+          key: `${round.round}-${question.id}`,
+          round: round.round,
+          inOpenRound,
+          question,
+          answer: answer !== undefined && answer !== null && answer.trim() ? answer : null,
+        });
+      }
+    }
+    return list;
+  }, [rounds, openRoundId, sent, serverAnswers]);
+
+  const openQuestions = useMemo(
+    () => (detail?.currentQuestionRound?.questions ?? []) as QuestionItem[],
     [detail?.currentQuestionRound],
   );
+  // Under a filter the composer must stay on the visible axis: once that axis is done for
+  // the round there is no fallback, and the composer gives way to an explanatory note.
+  const filteredOpenQuestions = useMemo(
+    () => (themeFilter ? openQuestions.filter((q) => themeKey(q) === themeFilter) : openQuestions),
+    [openQuestions, themeFilter],
+  );
+  const firstUnanswered = filteredOpenQuestions.find((q) => sent[q.id] === undefined) ?? null;
+  const activeQuestion =
+    (activeId ? openQuestions.find((q) => q.id === activeId) : undefined) ?? firstUnanswered;
 
+  // Scrolls the chat feed only — scrollIntoView would drag the outer columns along.
+  function scrollChatTo(key: string) {
+    const node = chatRef.current;
+    const bubble = document.getElementById(`chat-${key}`);
+    if (!node || !bubble) return false;
+    const top = bubble.getBoundingClientRect().top - node.getBoundingClientRect().top + node.scrollTop;
+    node.scrollTo({ top: Math.max(top - 24, 0), behavior: "smooth" });
+    return true;
+  }
+
+  // Auto-scroll: keep the latest bubble in view as the conversation grows. Two cases put
+  // the active question elsewhere than at the end — an answered exchange reopened for
+  // editing, and a filtered axis where open questions keep their order — and there we
+  // scroll to that question instead of jumping to the bottom.
+  const sentCount = Object.keys(sent).length;
+  const openRound = detail?.currentQuestionRound?.round ?? null;
+  const focusKey =
+    activeQuestion && openRound !== null && (themeFilter || sent[activeQuestion.id] !== undefined)
+      ? `${openRound}-${activeQuestion.id}`
+      : null;
   useEffect(() => {
-    setAnswers({});
-    setActiveId(questions[0]?.id ?? null);
-  }, [roundId, questions]);
+    if (focusKey && scrollChatTo(focusKey)) return;
+    const node = chatRef.current;
+    if (node) node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+  }, [entries.length, sentCount, submitting, detail?.deliverable, activeQuestion?.id, focusKey]);
 
   if (loadError) {
     return (
@@ -116,43 +274,44 @@ export default function WarRoom() {
 
   if (!detail) {
     return (
-      <div className="flex h-screen items-center justify-center bg-canvas-bg text-sm text-on-surface-variant">
+      <div className="flex h-screen flex-col items-center justify-center gap-3 bg-canvas-bg text-sm text-on-surface-variant">
+        <span className="material-symbols-outlined animate-spin text-[28px] text-primary">progress_activity</span>
         {t("common.loading")}
       </div>
     );
   }
 
   const { session, subject, sessionSummary, deliverable } = detail;
-  const groups = groupByTheme(questions);
-  const activeQuestion = questions.find((q) => q.id === activeId) ?? questions[0] ?? null;
-  const answeredCount = questions.filter((q) => (answers[q.id] ?? "").trim().length > 0).length;
-  const openCount = Math.max(questions.length - answeredCount, 0);
+  const groups = groupByTheme(entries);
+  const answeredCount = openQuestions.filter((q) => (sent[q.id] ?? "").trim().length > 0).length;
+  const openCount = Math.max(openQuestions.length - answeredCount, 0);
   const tensionCount = sessionSummary.risks.length;
   const clarity = clarityFromConfidence(sessionSummary.confidence, Boolean(deliverable));
-  const activeDraft = activeQuestion ? answers[activeQuestion.id] ?? "" : "";
   const suggestions = activeQuestion?.suggestions ?? [];
+  const busy = submitting || switching;
 
   const suggestion =
     session.detectedGrid && session.detectedGrid !== session.grid && !suggestionDismissed
       ? session.detectedGrid
       : null;
 
-  function setDraft(questionId: string, value: string) {
-    setAnswers((prev) => ({ ...prev, [questionId]: value }));
-  }
-
   // A chip fills an empty draft, and appends to an existing one so several can be combined.
-  function applySuggestion(questionId: string, suggestion: string) {
-    setAnswers((prev) => {
-      const current = (prev[questionId] ?? "").trim();
-      if (!current) return { ...prev, [questionId]: suggestion };
-      if (current.includes(suggestion)) return prev;
-      return { ...prev, [questionId]: `${current}, ${suggestion}` };
+  function applySuggestion(text: string) {
+    setDraft((current) => {
+      const trimmed = current.trim();
+      if (!trimmed) return text;
+      if (trimmed.includes(text)) return current;
+      return `${trimmed}, ${text}`;
     });
   }
 
+  async function refreshDetail() {
+    const fresh = await getSession(sessionId);
+    setDetail(fresh);
+  }
+
   async function handleSetMode(mode: string) {
-    if (switching) return;
+    if (busy) return;
     setSwitching(true);
     setSubmitError(null);
     try {
@@ -166,25 +325,17 @@ export default function WarRoom() {
     }
   }
 
-  async function submitRound() {
+  async function submitRound(answersMap: Record<string, string>) {
     if (submitting) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
       const response = await submitAnswers(sessionId, {
-        answers: questions.map((q) => ({ questionId: q.id, answer: answers[q.id] ?? "" })),
+        answers: openQuestions.map((q) => ({ questionId: q.id, answer: answersMap[q.id] ?? "" })),
       });
-      setDetail((current) =>
-        current
-          ? {
-              ...current,
-              session: response.session,
-              currentQuestionRound: response.questionRound,
-              sessionSummary: response.sessionSummary,
-              deliverable: response.deliverable,
-            }
-          : current,
-      );
+      setDegraded(response.degraded);
+      // Refetch so the chat history (all rounds + stored answers) stays server-truth.
+      await refreshDetail();
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : t("session.answers_submit_failed"));
     } finally {
@@ -193,16 +344,49 @@ export default function WarRoom() {
   }
 
   function handleSend() {
-    if (!activeQuestion || !activeDraft.trim()) return;
-    const nextUnanswered = questions.find(
-      (q) => q.id !== activeQuestion.id && !(answers[q.id] ?? "").trim(),
-    );
-    if (nextUnanswered) {
-      setActiveId(nextUnanswered.id);
-    } else {
-      void submitRound();
-    }
+    if (!activeQuestion || !draft.trim() || busy) return;
+    const updated = { ...sent, [activeQuestion.id]: draft.trim() };
+    setSent(updated);
+    setDraft("");
+    setActiveId(null);
+    const remaining = openQuestions.filter((q) => updated[q.id] === undefined);
+    if (remaining.length === 0) void submitRound(updated);
   }
+
+  function focusQuestion(question: QuestionItem) {
+    setActiveId(question.id);
+    // An already answered question gets its text back in the composer so it can be
+    // edited before the round is sent.
+    setDraft(sent[question.id] ?? "");
+  }
+
+  // Narrowing the chat to one axis: the composer follows, so it never answers a question
+  // the filtered thread does not show. Clicking the selected axis again clears the filter.
+  function selectTheme(theme: string | null) {
+    const next = theme === themeFilter ? null : theme;
+    setThemeFilter(next);
+    if (!next || submitting) return;
+    const target = openQuestions.find((q) => themeKey(q) === next && sent[q.id] === undefined);
+    if (target) focusQuestion(target);
+  }
+
+  function handleSidebarClick(entry: QuestionEntry) {
+    // Only touch the filter when it would hide the question that was just clicked.
+    if (themeFilter && themeKey(entry.question) !== themeFilter) {
+      setThemeFilter(themeKey(entry.question));
+    }
+    if (entry.inOpenRound && !submitting) {
+      // Jump to any question of the open round.
+      focusQuestion(entry.question);
+      return;
+    }
+    scrollChatTo(entry.key);
+  }
+
+  const typingLabel =
+    session.round >= session.maxRounds
+      ? "Analyse des réponses et rédaction du livrable…"
+      : "Analyse des réponses… le prochain tour arrive";
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-surface-container-low font-body-md text-on-surface">
@@ -218,7 +402,13 @@ export default function WarRoom() {
               to="/refinement"
               className="flex h-full items-center px-4 font-label-md text-label-md text-on-surface-variant transition-colors hover:bg-surface-container-low no-underline"
             >
-              Dashboard
+              {t("nav.dashboard")}
+            </Link>
+            <Link
+              to="/refinement/history"
+              className="flex h-full items-center px-4 font-label-md text-label-md text-on-surface-variant transition-colors hover:bg-surface-container-low no-underline"
+            >
+              {t("nav.history")}
             </Link>
             <span className="flex h-full items-center border-b-2 border-primary px-4 font-bold text-primary">
               War Room
@@ -255,26 +445,41 @@ export default function WarRoom() {
               {groups.length === 0 && (
                 <p className="text-sm italic text-on-surface-variant">{t("common.loading")}</p>
               )}
-              {groups.map((group) => (
+              {groups.map((group) => {
+                const answered = group.entries.filter((entry) => entry.answer !== null).length;
+                const selected = group.theme === themeFilter;
+                return (
                 <div key={group.theme} className="mt-2 first:mt-0">
-                  <div className="relative z-10 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => selectTheme(group.theme)}
+                    title={selected ? "Revenir au fil complet" : `Filtrer le fil sur « ${group.theme} »`}
+                    className={`relative z-10 flex w-full items-center gap-2 rounded border-0 px-1 py-1 text-left transition-colors ${
+                      selected ? "bg-surface-container-highest" : "bg-transparent hover:bg-surface-container-low"
+                    }`}
+                  >
                     <span className={`material-symbols-outlined text-[16px] ${group.style.text}`}>
-                      arrow_drop_down
+                      {selected ? "filter_alt" : "arrow_drop_down"}
                     </span>
                     <span className={`material-symbols-outlined text-[18px] ${group.style.text}`}>
                       {group.style.icon}
                     </span>
-                    <span className="font-label-md text-on-surface">{group.theme}</span>
-                  </div>
+                    <span className={`flex-1 truncate font-label-md ${selected ? "font-bold" : ""} text-on-surface`}>
+                      {group.theme}
+                    </span>
+                    <span className="shrink-0 text-[11px] tabular-nums text-on-surface-variant">
+                      {answered}/{group.entries.length}
+                    </span>
+                  </button>
                   <div className="my-1 ml-6 flex flex-col gap-2 border-l-2 border-border-subtle pl-2">
-                    {group.questions.map((question) => {
-                      const isActive = question.id === activeQuestion?.id;
-                      const isAnswered = (answers[question.id] ?? "").trim().length > 0;
+                    {group.entries.map((entry) => {
+                      const isActive = entry.inOpenRound && entry.question.id === activeQuestion?.id;
+                      const isAnswered = entry.answer !== null;
                       return (
                         <button
                           type="button"
-                          key={question.id}
-                          onClick={() => setActiveId(question.id)}
+                          key={entry.key}
+                          onClick={() => handleSidebarClick(entry)}
                           className={`tree-node-line relative flex items-center gap-2 rounded border-0 px-2 py-1 text-left text-sm transition-colors ${
                             isActive
                               ? "bg-surface-container-highest font-bold text-on-surface"
@@ -282,24 +487,25 @@ export default function WarRoom() {
                           }`}
                         >
                           <div
-                            className={`h-1.5 w-1.5 rounded-full ${
+                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
                               isAnswered ? group.style.bg : `border ${group.style.border}`
                             }`}
                           ></div>
-                          <span className="truncate">{question.question}</span>
+                          <span className="truncate">{entry.question.question}</span>
                         </button>
                       );
                     })}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </aside>
 
         {/* ZONE 2: Decision War Room */}
         <main className="flex flex-1 flex-col overflow-y-auto bg-canvas-bg">
-          <div className="mx-auto flex w-full max-w-[900px] flex-col gap-6 p-6">
+          <div className="mx-auto flex w-full max-w-[900px] flex-1 flex-col gap-6 p-6">
             {/* Grid suggestion */}
             {suggestion && (
               <div className="flex items-center justify-between gap-3 rounded-lg border border-primary-fixed bg-primary-container/10 px-4 py-3">
@@ -311,7 +517,7 @@ export default function WarRoom() {
                 <div className="flex shrink-0 gap-2">
                   <button
                     type="button"
-                    disabled={switching}
+                    disabled={busy}
                     onClick={() => void handleSetMode(suggestion)}
                     className="rounded bg-primary px-3 py-1.5 text-sm font-label-md text-on-primary hover:bg-primary-container disabled:opacity-50"
                   >
@@ -369,116 +575,275 @@ export default function WarRoom() {
               </div>
             )}
 
-            {/* Active Focus Card */}
-            {activeQuestion ? (
-              <div className="flex min-h-[500px] flex-1 flex-col overflow-hidden rounded-xl border border-primary-fixed bg-surface shadow-sm">
-                <div className="flex items-center justify-between border-b border-primary-fixed bg-primary-container/10 px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-3 w-3 rounded-full bg-node-pink"></div>
-                    <span className="font-label-md uppercase tracking-wide text-primary">
-                      Active Refinement: {activeQuestion.theme}
-                    </span>
-                  </div>
-                  <span className="rounded-full border border-border-subtle bg-surface-container-low px-3 py-1 text-xs font-medium text-on-surface-variant">
-                    {t("session.round")} {session.round}/{session.maxRounds} · {label("status", session.status)}
+            {degraded && (
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-score-warn/40 bg-score-warn/10 px-4 py-3">
+                <div className="flex items-start gap-2 text-sm text-on-surface">
+                  <span className="material-symbols-outlined text-[18px] text-score-warn">warning</span>
+                  <span>
+                    Le moteur IA n'a pas répondu correctement : ces questions sont des questions
+                    génériques de secours. Vérifie la configuration LLM dans les Réglages, ou
+                    revalide le tour pour retenter.
                   </span>
                 </div>
-                <div className="flex h-full flex-col gap-6 p-6">
-                  {/* Chat area */}
-                  <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4">
-                    <div className="flex min-h-[240px] flex-1 flex-col gap-6 overflow-y-auto rounded-lg border border-border-subtle bg-surface-container-lowest p-6">
-                      <div className="flex justify-start">
-                        <div className="max-w-[75%] rounded-xl rounded-tl-none border border-border-subtle bg-surface-container p-4 text-on-surface">
-                          <p className="font-body-md text-body-lg">{activeQuestion.question}</p>
-                        </div>
-                      </div>
-                      {activeDraft.trim() && (
-                        <div className="flex justify-end">
-                          <div className="max-w-[75%] rounded-xl rounded-tr-none bg-primary-container p-4 text-on-primary shadow-sm">
-                            <p className="font-body-md text-body-lg">{activeDraft}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                <button
+                  type="button"
+                  onClick={() => setDegraded(false)}
+                  className="shrink-0 rounded border-0 bg-transparent p-1 text-on-surface-variant hover:bg-surface-container-low"
+                >
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+            )}
 
-                    <div className="mt-auto flex flex-col gap-3">
-                      {/* Model-proposed answers */}
-                      {suggestions.length > 0 && (
-                        <div className="flex flex-wrap justify-center gap-3">
-                          {suggestions.map((suggestion) => {
-                            const picked = activeDraft.includes(suggestion);
-                            return (
+            {/* Conversation card */}
+            <div className="relative flex min-h-[500px] flex-1 flex-col overflow-hidden rounded-xl border border-primary-fixed bg-surface shadow-sm">
+              <div className="flex items-center justify-between border-b border-primary-fixed bg-primary-container/10 px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-3 w-3 rounded-full bg-node-pink"></div>
+                  <span className="font-label-md uppercase tracking-wide text-primary">
+                    {activeQuestion ? `Active Refinement: ${activeQuestion.theme}` : "Refinement"}
+                  </span>
+                  {themeFilter && (
+                    <button
+                      type="button"
+                      onClick={() => selectTheme(null)}
+                      title="Revenir au fil complet"
+                      className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-primary bg-surface px-2 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/5"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">filter_alt</span>
+                      <span className="max-w-[160px] truncate">{themeFilter}</span>
+                      <span className="material-symbols-outlined text-[14px]">close</span>
+                    </button>
+                  )}
+                </div>
+                <span className="rounded-full border border-border-subtle bg-surface-container-low px-3 py-1 text-xs font-medium text-on-surface-variant">
+                  {t("session.round")} {session.round}/{session.maxRounds} · {label("status", session.status)}
+                </span>
+              </div>
+
+              {/* Mode-switch overlay */}
+              {switching && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-surface/80 backdrop-blur-sm">
+                  <span className="material-symbols-outlined animate-spin text-[32px] text-primary">
+                    progress_activity
+                  </span>
+                  <p className="text-sm text-on-surface-variant">Nouvelles questions en préparation…</p>
+                </div>
+              )}
+
+              <div className="flex flex-1 flex-col gap-4 p-6">
+                {/* Chat feed */}
+                <div
+                  ref={chatRef}
+                  className="flex min-h-[280px] flex-1 flex-col gap-4 overflow-y-auto rounded-lg border border-border-subtle bg-surface-container-lowest p-6"
+                >
+                  {rounds.map((round) => {
+                    const inOpenRound = round.id === openRoundId;
+                    const roundQuestions = themeFilter
+                      ? round.questions.filter((q) => themeKey(q) === themeFilter)
+                      : round.questions;
+                    const chatQuestions = inOpenRound
+                      ? openRoundOrder(
+                          roundQuestions,
+                          sent,
+                          activeQuestion?.id ?? null,
+                          Boolean(themeFilter),
+                        )
+                      : roundQuestions;
+                    const bubbles: JSX.Element[] = [];
+                    for (const question of chatQuestions) {
+                      const key = `${round.round}-${question.id}`;
+                      const answer = inOpenRound
+                        ? sent[question.id] ?? null
+                        : serverAnswers.get(`${round.round}:${question.id}`) ?? null;
+                      const isActive = inOpenRound && question.id === activeQuestion?.id;
+                      const isPending = inOpenRound && answer === null && !isActive;
+
+                      // The chronological view keeps the open round conversational: only the
+                      // questions already answered locally plus the active one are visible.
+                      // A filtered axis shows its whole thread, upcoming questions included.
+                      if (isPending && !themeFilter) continue;
+
+                      bubbles.push(
+                        <div key={`q-${key}`} id={`chat-${key}`} className="flex justify-start">
+                          <div
+                            className={`max-w-[75%] rounded-xl rounded-tl-none border p-4 ${
+                              isActive
+                                ? "border-primary bg-primary-container/10 text-on-surface"
+                                : isPending
+                                  ? "border-dashed border-border-subtle bg-transparent text-on-surface-variant"
+                                  : "border-border-subtle bg-surface-container text-on-surface"
+                            }`}
+                          >
+                            <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                              {question.theme}
+                            </p>
+                            <p className="font-body-md text-body-lg">{question.question}</p>
+                            {isActive && question.why && (
+                              <p className="mt-2 text-xs italic text-on-surface-variant">{question.why}</p>
+                            )}
+                            {isPending && (
                               <button
                                 type="button"
-                                key={suggestion}
-                                onClick={() => applySuggestion(activeQuestion.id, suggestion)}
-                                className={`cursor-pointer rounded-full border-2 border-primary px-5 py-2.5 font-label-md text-sm font-bold shadow-sm transition-colors ${
-                                  picked
-                                    ? "bg-primary text-on-primary"
-                                    : "bg-surface text-primary hover:bg-primary/5"
-                                }`}
+                                disabled={busy}
+                                onClick={() => focusQuestion(question)}
+                                className="mt-2 rounded border-0 bg-transparent p-0 text-xs font-bold text-primary hover:underline disabled:opacity-40"
                               >
-                                {suggestion}
+                                Répondre à cette question
                               </button>
-                            );
-                          })}
-                        </div>
-                      )}
+                            )}
+                          </div>
+                        </div>,
+                      );
 
-                      <div className="relative flex items-end gap-2">
-                        <textarea
-                          value={activeDraft}
-                          onChange={(e) => setDraft(activeQuestion.id, e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                              e.preventDefault();
-                              handleSend();
-                            }
-                          }}
-                          placeholder="Réponds à cette question..."
-                          className="min-h-[80px] w-full resize-none rounded-lg border border-border-subtle bg-surface-container-lowest p-3 font-body-md text-body-md focus:border-primary focus:ring-1 focus:ring-primary"
-                        />
-                        <div className="absolute bottom-3 right-3 flex gap-2">
-                          <button
-                            type="button"
-                            onClick={handleSend}
-                            disabled={submitting || !activeDraft.trim()}
-                            className="flex h-8 w-8 items-center justify-center rounded border-0 bg-primary text-on-primary shadow-sm transition-colors hover:bg-primary-container disabled:opacity-40"
-                          >
-                            <span className="material-symbols-outlined text-[18px]">send</span>
-                          </button>
-                        </div>
+                      if (answer !== null && answer.trim()) {
+                        bubbles.push(
+                          <div key={`a-${key}`} className="flex justify-end">
+                            <div className="max-w-[75%] rounded-xl rounded-tr-none bg-primary-container p-4 text-on-primary shadow-sm">
+                              <p className="font-body-md text-body-lg">{answer}</p>
+                            </div>
+                          </div>,
+                        );
+                      } else if (!inOpenRound) {
+                        bubbles.push(
+                          <div key={`a-${key}`} className="flex justify-end">
+                            <p className="text-xs italic text-outline">Sans réponse</p>
+                          </div>,
+                        );
+                      }
+                    }
+                    // A filtered axis is absent from most rounds: no bubble, no divider.
+                    if (bubbles.length === 0) return null;
+                    return (
+                      <div key={round.id} className="flex flex-col gap-4">
+                        <RoundDivider round={round.round} />
+                        {bubbles}
                       </div>
+                    );
+                  })}
 
-                      <div className="flex items-center justify-between">
-                        <span className="font-label-sm text-outline">
-                          {answeredCount}/{questions.length} resolved
-                        </span>
+                  {submitting && <TypingIndicator label={typingLabel} />}
+
+                  {deliverable && !submitting && (
+                    <div className="mt-2 rounded-xl border border-score-good/40 bg-surface p-5 text-center">
+                      <span className="material-symbols-outlined text-[28px] text-score-good">task_alt</span>
+                      <p className="mt-1 font-headline-md text-on-surface">Refinement terminé</p>
+                      <p className="mt-1 text-sm text-on-surface-variant">
+                        Le livrable à droite est prêt à être exporté.
+                      </p>
+                    </div>
+                  )}
+
+                  {!deliverable && !submitting && !activeQuestion && openQuestions.length === 0 && (
+                    <p className="text-center text-sm italic text-on-surface-variant">{sessionSummary.reason}</p>
+                  )}
+                </div>
+
+                {/* Axis done for this round: the composer has nothing to target here. */}
+                {!activeQuestion && themeFilter && !deliverable && !submitting && (
+                  <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border-subtle p-4 text-center">
+                    <p className="text-sm text-on-surface-variant">
+                      Aucune question ouverte sur « {themeFilter} » pour ce tour.
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => selectTheme(null)}
+                        className="rounded border border-border-subtle bg-surface px-4 py-1.5 font-label-md text-label-md text-on-surface-variant transition-colors hover:bg-surface-container-low"
+                      >
+                        Revenir au fil complet
+                      </button>
+                      {openCount > 0 && answeredCount > 0 && (
                         <button
                           type="button"
-                          onClick={() => void submitRound()}
-                          disabled={submitting || answeredCount === 0}
+                          onClick={() => void submitRound(sent)}
+                          disabled={busy}
                           className="flex items-center gap-2 rounded border-0 bg-primary-container px-4 py-1.5 font-label-md text-label-md text-on-primary transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
                         >
-                          <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
-                          {submitting ? t("common.loading") : "Valider le tour"}
+                          <span className="material-symbols-outlined text-[16px]">skip_next</span>
+                          Terminer le tour sans le reste
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Composer */}
+                {activeQuestion && (
+                  <div className="flex flex-col gap-3">
+                    {suggestions.length > 0 && (
+                      <div className="flex flex-wrap justify-center gap-3">
+                        {suggestions.map((item) => {
+                          const picked = draft.includes(item);
+                          return (
+                            <button
+                              type="button"
+                              key={item}
+                              disabled={busy}
+                              onClick={() => applySuggestion(item)}
+                              className={`cursor-pointer rounded-full border-2 border-primary px-5 py-2.5 font-label-md text-sm font-bold shadow-sm transition-colors disabled:opacity-50 ${
+                                picked
+                                  ? "bg-primary text-on-primary"
+                                  : "bg-surface text-primary hover:bg-primary/5"
+                              }`}
+                            >
+                              {item}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="relative flex items-end gap-2">
+                      <textarea
+                        value={draft}
+                        disabled={busy}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSend();
+                          }
+                        }}
+                        placeholder={
+                          activeQuestion && sent[activeQuestion.id] !== undefined
+                            ? "Modifie ta réponse puis renvoie…"
+                            : "Réponds à cette question…"
+                        }
+                        className="min-h-[80px] w-full resize-none rounded-lg border border-border-subtle bg-surface-container-lowest p-3 font-body-md text-body-md focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-60"
+                      />
+                      <div className="absolute bottom-3 right-3 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSend}
+                          disabled={busy || !draft.trim()}
+                          className="flex h-8 w-8 items-center justify-center rounded border-0 bg-primary text-on-primary shadow-sm transition-colors hover:bg-primary-container disabled:opacity-40"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">send</span>
                         </button>
                       </div>
                     </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="font-label-sm text-outline">
+                        {answeredCount}/{openQuestions.length} resolved · Entrée pour envoyer
+                      </span>
+                      {openCount > 0 && answeredCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => void submitRound(sent)}
+                          disabled={busy}
+                          className="flex items-center gap-2 rounded border-0 bg-primary-container px-4 py-1.5 font-label-md text-label-md text-on-primary transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">skip_next</span>
+                          Terminer le tour sans le reste
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
-            ) : (
-              <div className="rounded-xl border border-border-subtle bg-surface p-8 text-center">
-                <span className="material-symbols-outlined text-[32px] text-score-good">task_alt</span>
-                <p className="mt-2 font-headline-md text-on-surface">
-                  {deliverable ? "Refinement terminé" : "Aucune question ouverte"}
-                </p>
-                <p className="mt-1 text-sm text-on-surface-variant">
-                  {deliverable ? "Le livrable à droite est prêt à être exporté." : sessionSummary.reason}
-                </p>
-              </div>
-            )}
+            </div>
           </div>
         </main>
 

@@ -71,6 +71,37 @@ export interface SessionModel {
   createdAt: string | null;
 }
 
+export interface SessionListItem {
+  id: string;
+  title: string;
+  status: SessionStatus;
+  grid: string;
+  mode: string;
+  round: number;
+  maxRounds: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface SessionListResponse {
+  items: SessionListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListSessionsParams {
+  q?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface RenameSessionRequest {
+  title: string;
+}
+
 export interface DecisionModel {
   enoughContext: boolean;
   confidence: string;
@@ -102,12 +133,21 @@ export interface StartSessionResponse {
   session: SessionModel;
   questionRound: QuestionRoundModel | null;
   sessionSummary: SessionSummaryModel;
+  degraded: boolean;
+}
+
+export interface AnswerHistoryItem {
+  questionId: string;
+  round: number;
+  answer: string;
 }
 
 export interface SessionDetailResponse {
   session: SessionModel;
   subject: SubjectModel;
   currentQuestionRound: QuestionRoundModel | null;
+  questionRounds: QuestionRoundModel[];
+  answers: AnswerHistoryItem[];
   sessionSummary: SessionSummaryModel;
   deliverable: RefinementDeliverable | null;
 }
@@ -118,6 +158,7 @@ export interface SubmitAnswersResponse {
   questionRound: QuestionRoundModel | null;
   sessionSummary: SessionSummaryModel;
   deliverable: RefinementDeliverable | null;
+  degraded: boolean;
 }
 
 // --- settings --------------------------------------------------------------

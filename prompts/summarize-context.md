@@ -19,7 +19,10 @@ Instructions:
 4. Add `dependencies` and `risks` when clearly supported by the context.
 5. Set `confidence` (`low|medium|high`) based on how well the subject is understood.
 6. Set `enoughContext=true` only when a practical deliverable can be produced with
-   acceptable confidence.
+   acceptable confidence. Be conservative: if `unknowns` is non-empty, or if answers were
+   vague or missing, keep `enoughContext=false` — a follow-up round is cheaper than a
+   deliverable full of holes. After a single answered round, `enoughContext=true` is only
+   acceptable when the answers left nothing material to clarify.
 7. The `reason` must briefly justify the decision (for logs and UI).
 
 Return strict JSON only:

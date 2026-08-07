@@ -20,7 +20,15 @@ def route_start(state: RefinementState) -> Literal["generate_questions", "summar
 
 
 def route_after_summary(state: RefinementState) -> Literal["generate_questions", "generate_final_refinement"]:
-    if state.get("enough_context") or int(state.get("round", 0)) >= int(state.get("max_rounds", 3)):
+    round_number = int(state.get("round", 0))
+    max_rounds = int(state.get("max_rounds", 3))
+    # The LLM tends to declare enoughContext too early; a floor of rounds keeps at
+    # least one follow-up pass before the deliverable can be produced.
+    min_rounds = min(int(state.get("min_rounds", 2)), max_rounds)
+
+    if round_number >= max_rounds:
+        return "generate_final_refinement"
+    if state.get("enough_context") and round_number >= min_rounds:
         return "generate_final_refinement"
     return "generate_questions"
 

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from src.api.schemas_refinement import (
     CreateSessionRequest,
+    RenameSessionRequest,
     SessionDetailResponse,
+    SessionListItem,
+    SessionListResponse,
     SetModeRequest,
     StartSessionResponse,
     SubmitAnswersRequest,
@@ -27,6 +30,18 @@ async def create_session(payload: CreateSessionRequest, db: Session = Depends(ge
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get("/sessions", response_model=SessionListResponse)
+async def list_sessions(
+    q: str | None = None,
+    status: str | None = None,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    service = get_refinement_service()
+    return service.list_sessions(db, query=q, status=status, limit=limit, offset=offset)
+
+
 @router.get("/sessions/{session_id}", response_model=SessionDetailResponse)
 async def get_session(session_id: str, db: Session = Depends(get_db)):
     service = get_refinement_service()
@@ -34,6 +49,31 @@ async def get_session(session_id: str, db: Session = Depends(get_db)):
         return await service.get_session(db, session_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.patch("/sessions/{session_id}", response_model=SessionListItem)
+async def rename_session(
+    session_id: str,
+    payload: RenameSessionRequest,
+    db: Session = Depends(get_db),
+):
+    service = get_refinement_service()
+    try:
+        return service.rename_session(db, session_id, payload.title)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+async def delete_session(session_id: str, db: Session = Depends(get_db)):
+    service = get_refinement_service()
+    try:
+        service.delete_session(db, session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(status_code=204)
 
 
 @router.post("/sessions/{session_id}/mode", response_model=SessionDetailResponse)

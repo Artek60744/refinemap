@@ -118,14 +118,51 @@ class StartSessionResponse(StrictModel):
     session: SessionModel
     questionRound: QuestionRoundModel | None = None
     sessionSummary: SessionSummaryModel
+    # True when the LLM failed and the offline engine produced this content.
+    degraded: bool = False
+
+
+class AnswerHistoryItem(StrictModel):
+    questionId: str
+    round: int
+    answer: str
 
 
 class SessionDetailResponse(StrictModel):
     session: SessionModel
     subject: SubjectModel
     currentQuestionRound: QuestionRoundModel | None = None
+    # Full history so the UI can render the whole conversation, not just the open round.
+    questionRounds: list[QuestionRoundModel] = Field(default_factory=list)
+    answers: list[AnswerHistoryItem] = Field(default_factory=list)
     sessionSummary: SessionSummaryModel
     deliverable: RefinementDeliverable | None = None
+
+
+class RenameSessionRequest(StrictModel):
+    title: str = Field(min_length=1, max_length=512)
+
+
+class SessionListItem(StrictModel):
+    """One row of the history list. SessionModel carries no title and no updatedAt."""
+
+    id: str
+    title: str
+    status: str
+    grid: str
+    mode: str
+    round: int
+    maxRounds: int
+    createdAt: datetime | None = None
+    updatedAt: datetime | None = None
+    completedAt: datetime | None = None
+
+
+class SessionListResponse(StrictModel):
+    items: list[SessionListItem] = Field(default_factory=list)
+    total: int
+    limit: int
+    offset: int
 
 
 class SubmitAnswersResponse(StrictModel):
@@ -134,6 +171,8 @@ class SubmitAnswersResponse(StrictModel):
     questionRound: QuestionRoundModel | None = None
     sessionSummary: SessionSummaryModel
     deliverable: RefinementDeliverable | None = None
+    # True when the LLM failed and the offline engine produced this content.
+    degraded: bool = False
 
 
 # --- LLM structured outputs ------------------------------------------------

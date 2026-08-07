@@ -12,6 +12,7 @@ class RefinementState(TypedDict, total=False):
     grid: str
     extra_context: str
     round: int
+    min_rounds: int
     max_rounds: int
     max_questions_per_round: int
     asked_questions: list[dict[str, Any]]
@@ -37,6 +38,7 @@ def create_initial_state(
     mode: str,
     grid: str,
     extra_context: str,
+    min_rounds: int,
     max_rounds: int,
     max_questions_per_round: int,
 ) -> RefinementState:
@@ -49,6 +51,7 @@ def create_initial_state(
         "grid": grid,
         "extra_context": extra_context,
         "round": 0,
+        "min_rounds": min_rounds,
         "max_rounds": max_rounds,
         "max_questions_per_round": max_questions_per_round,
         "asked_questions": [],
