@@ -254,7 +254,7 @@ export default function WarRoom() {
   const sentCount = Object.keys(sent).length;
   const openRound = detail?.currentQuestionRound?.round ?? null;
   const focusKey =
-    activeQuestion && openRound !== null && (themeFilter || sent[activeQuestion.id] !== undefined)
+    activeQuestion && openRound !== null && !submitting
       ? `${openRound}-${activeQuestion.id}`
       : null;
   useEffect(() => {
@@ -284,6 +284,7 @@ export default function WarRoom() {
 
   const { session, subject, sessionSummary, deliverable } = detail;
   const groups = groupByTheme(entries);
+  const themeStyles = new Map(groups.map((group) => [group.theme, group.style]));
   const answeredCount = openQuestions.filter((q) => (sent[q.id] ?? "").trim().length > 0).length;
   const openCount = Math.max(openQuestions.length - answeredCount, 0);
   const tensionCount = sessionSummary.risks.length;
@@ -506,7 +507,7 @@ export default function WarRoom() {
 
         {/* ZONE 2: Decision War Room */}
         <main className="flex flex-1 flex-col overflow-y-auto bg-canvas-bg">
-          <div className="mx-auto flex w-full max-w-[900px] flex-1 flex-col gap-6 p-6">
+          <div className="mx-auto flex min-h-0 w-full max-w-[900px] flex-1 flex-col gap-6 p-6">
             {/* Grid suggestion */}
             {suggestion && (
               <div className="flex items-center justify-between gap-3 rounded-lg border border-primary-fixed bg-primary-container/10 px-4 py-3">
@@ -632,7 +633,7 @@ export default function WarRoom() {
                 </div>
               )}
 
-              <div className="flex flex-1 flex-col gap-4 p-6">
+              <div className="flex min-h-0 flex-1 flex-col gap-4 p-6">
                 {/* Chat feed */}
                 <div
                   ref={chatRef}
@@ -699,10 +700,21 @@ export default function WarRoom() {
 
                       if (answer !== null && answer.trim()) {
                         bubbles.push(
-                          <div key={`a-${key}`} className="flex justify-end">
+                          <div key={`a-${key}`} className="flex flex-col items-end gap-1">
                             <div className="max-w-[75%] rounded-xl rounded-tr-none bg-primary-container p-4 text-on-primary shadow-sm">
                               <p className="font-body-md text-body-lg">{answer}</p>
                             </div>
+                            {inOpenRound && !busy && (
+                              <button
+                                type="button"
+                                onClick={() => focusQuestion(question)}
+                                title="Corriger cette réponse"
+                                className="flex items-center gap-1 rounded-full border border-border-subtle bg-surface px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant transition-colors hover:bg-surface-container-low"
+                              >
+                                <span className="material-symbols-outlined text-[14px]">edit</span>
+                                Modifier
+                              </button>
+                            )}
                           </div>,
                         );
                       } else if (!inOpenRound) {
@@ -904,7 +916,12 @@ export default function WarRoom() {
                     <p className="mb-4 leading-relaxed text-on-surface-variant">{deliverable.summary}</p>
                   )}
                   {deliverable.brief.map((section, index) => (
-                    <Section key={index} heading={section.heading} items={section.items} />
+                    <Section
+                      key={index}
+                      heading={section.heading}
+                      items={section.items}
+                      style={themeStyles.get(section.heading) ?? THEME_STYLES[0]}
+                    />
                   ))}
                   <div className="mt-6">
                     <Link
@@ -959,11 +976,19 @@ export default function WarRoom() {
   );
 }
 
-function Section({ heading, items }: { heading: string; items: string[] }) {
+function Section({
+  heading,
+  items,
+  style = THEME_STYLES[0],
+}: {
+  heading: string;
+  items: string[];
+  style?: (typeof THEME_STYLES)[number];
+}) {
   return (
     <div className="mb-4">
-      <h3 className="mb-2 mt-6 flex items-center gap-2 text-lg font-bold text-node-blue">
-        <span className="material-symbols-outlined text-[18px]">subject</span>
+      <h3 className={`mb-2 mt-6 flex items-center gap-2 text-lg font-bold ${style.text}`}>
+        <span className="material-symbols-outlined text-[18px]">{style.icon}</span>
         {heading}
       </h3>
       {items && items.length > 0 ? (
