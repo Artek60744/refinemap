@@ -16,7 +16,7 @@ def test_markdown_includes_decision_section_in_order():
             recommendation="rework",
             confidence="high",
             reasons=["Trop de risques non couverts.", "Le cadrage contredit un fait confirmé."],
-            blockers=["Traiter le risque légal"],
+            blockers=["Traiter le risque légal", "Nommer un owner"],
             strengths=["La valeur métier est claire"],
             nextAction="Reformuler le sujet en traitant le risque légal.",
         ),
@@ -25,13 +25,45 @@ def test_markdown_includes_decision_section_in_order():
 
     assert "## Decision" in markdown
     assert "**REWORK** — confidence: high" in markdown
-    assert "### Why" in markdown
+    # The verdict carries its own flip condition.
+    assert "Conditional go once the 2 blockers are lifted." in markdown
+    # The root cause is singled out, the rest is explicitly secondary.
+    assert "### Root cause" in markdown
+    assert "### Secondary reasons" in markdown
+    assert markdown.index("Trop de risques non couverts.") < markdown.index("### Secondary reasons")
     assert "### Real blockers" in markdown
+    assert "1. (main) Traiter le risque légal" in markdown
+    assert "2. Nommer un owner" in markdown
     assert "### What is already solid" in markdown
     assert "### Next action" in markdown
     assert "Reformuler le sujet en traitant le risque légal." in markdown
     # Decision is the headline: it comes before the Brief.
     assert markdown.index("## Decision") < markdown.index("## Brief")
+
+
+def test_markdown_conditional_go_line_uses_singular_and_skips_go():
+    single_blocker = RefinementDeliverable(
+        decisionReport=DecisionReport(
+            recommendation="explore",
+            confidence="high",
+            reasons=["Cause racine : le track de destination n'est pas tranché."],
+            blockers=["Trancher le track de destination"],
+            nextAction="Trancher le track de destination.",
+        )
+    )
+    markdown = render_deliverable_markdown(SUBJECT, single_blocker)
+    assert "Conditional go once the main blocker is lifted." in markdown
+
+    unreserved_go = RefinementDeliverable(
+        decisionReport=DecisionReport(
+            recommendation="go",
+            confidence="high",
+            reasons=["Aucun blocage résiduel."],
+            nextAction="Lancer la mise en œuvre.",
+        )
+    )
+    # A go needs no condition, and nothing to lift.
+    assert "Conditional go" not in render_deliverable_markdown(SUBJECT, unreserved_go)
 
 
 def test_markdown_skips_empty_decision_sublists():
@@ -46,6 +78,9 @@ def test_markdown_skips_empty_decision_sublists():
     markdown = render_deliverable_markdown(SUBJECT, deliverable)
 
     assert "**GO** — confidence: high" in markdown
+    assert "### Root cause" in markdown
+    # A single reason is the root cause and nothing else.
+    assert "### Secondary reasons" not in markdown
     assert "### Real blockers" not in markdown
     assert "### What is already solid" not in markdown
     assert "### Next action" in markdown

@@ -245,23 +245,48 @@ class MockRefinementLLM:
             recommendation = "explore"
             decision_confidence = "medium"
 
-        reasons = [
-            f"{len(facts)} faits confirmés contre {len(unknowns)} zones d'incertitude."
-        ]
-        if unknowns:
-            reasons.append(f"Inconnue décision-critique non levée : {unknowns[0]}")
-        if risks:
-            reasons.append(f"{len(risks)} risques identifiés, dont : {risks[0]}")
-        if assumptions:
-            reasons.append(f"{len(assumptions)} hypothèses restent non vérifiées, dont : {assumptions[0]}")
-        if len(reasons) == 1:
-            reasons.append("Aucun risque ni inconnue résiduelle : le sujet est actionnable.")
+        # One list of blocking subjects feeds the root cause, the blockers and the next
+        # action, so the three always point at the same thing. A `go` has none.
+        if recommendation == "go":
+            blocking_label, blocking_items = "", []
+        elif recommendation == "rework" and risks:
+            blocking_label, blocking_items = "Risque bloquant", risks[:2]
+        elif unknowns:
+            blocking_label, blocking_items = "Inconnue bloquante", unknowns[:2]
+        elif risks:
+            blocking_label, blocking_items = "Risque bloquant", risks[:2]
+        else:
+            blocking_label = "Cadrage bloquant"
+            blocking_items = ["le sujet ne permet pas de trancher en l'état"]
 
-        blockers = [] if recommendation == "go" else [
-            f"Lever l'inconnue : {unknown}" for unknown in unknowns[:3]
-        ]
-        if recommendation == "rework" and not blockers:
-            blockers = [f"Traiter le risque : {risk}" for risk in risks[:3]]
+        # One main blocker, one secondary at most: beyond that it is a shopping list.
+        blockers = [f"{blocking_label} : {item}" for item in blocking_items]
+
+        # reasons[0] is the root cause — the item that, once lifted, flips the verdict.
+        # Counting facts against unknowns is a meeting report, not a judgment.
+        if recommendation == "go":
+            root_cause = (
+                f"Aucun blocage résiduel : {facts[0]}"
+                if facts
+                else "Aucun risque ni inconnue résiduelle : le sujet est actionnable."
+            )
+        else:
+            root_cause = f"Cause racine : {blocking_items[0]}"
+
+        main_item = blocking_items[0] if blocking_items else None
+        secondaries: list[str] = []
+        for unknown in unknowns:
+            if unknown != main_item:
+                secondaries.append(f"Inconnue non levée : {unknown}")
+                break
+        for risk in risks:
+            if risk != main_item:
+                secondaries.append(f"Risque identifié : {risk}")
+                break
+        if assumptions:
+            secondaries.append(f"Hypothèse non vérifiée : {assumptions[0]}")
+        if not secondaries:
+            secondaries.append("Aucun autre point ne pèse sur ce verdict.")
 
         strengths = facts[:3]
         if not strengths:
@@ -269,30 +294,18 @@ class MockRefinementLLM:
 
         if recommendation == "go":
             next_action = "Lancer la mise en œuvre du plan proposé."
-        elif recommendation == "explore":
-            next_action = (
-                f"Répondre en priorité à : {unknowns[0]}"
-                if unknowns
-                else "Vérifier les hypothèses restantes avec les parties prenantes."
-            )
         elif recommendation == "rework":
-            next_action = (
-                f"Reformuler le sujet en traitant : {risks[0]}"
-                if risks
-                else "Reformuler le sujet pour lever les contradictions du cadrage."
-            )
+            next_action = f"Reformuler le sujet en traitant : {main_item}"
+        elif recommendation == "drop":
+            next_action = f"Ne pas poursuivre ; ne rouvrir que si ce point tombe : {main_item}"
         else:
-            next_action = (
-                f"Ne pas poursuivre en l'état ; réévaluer si « {unknowns[0]} » est levée."
-                if unknowns
-                else "Ne pas poursuivre en l'état."
-            )
+            next_action = f"Trancher en priorité : {main_item}"
 
         return DecisionReport(
             recommendation=recommendation,
             confidence=decision_confidence,
-            reasons=reasons[:4],
-            blockers=blockers[:3],
+            reasons=[root_cause, *secondaries][:4],
+            blockers=blockers[:2],
             strengths=strengths,
             nextAction=next_action,
         )

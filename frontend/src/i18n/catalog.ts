@@ -113,7 +113,18 @@ export const MESSAGES: Record<string, [en: string, fr: string]> = {
   "decision.recommendation": ["Recommendation", "Recommandation"],
   "decision.confidence": ["Confidence", "Confiance"],
   "decision.reasons": ["Why", "Pourquoi"],
+  "decision.root_cause": ["Root cause", "Cause racine"],
+  "decision.secondary_reasons": ["Secondary reasons", "Raisons secondaires"],
   "decision.blockers": ["Real blockers", "Blocage réel"],
+  "decision.main_blocker": ["main", "principal"],
+  "decision.conditional_go_one": [
+    "Conditional go once the main blocker is lifted.",
+    "Go conditionnel une fois le blocage principal levé.",
+  ],
+  "decision.conditional_go_many": [
+    "Conditional go once the {count} blockers are lifted.",
+    "Go conditionnel une fois les {count} blocages levés.",
+  ],
   "decision.strengths": ["What is already solid", "Ce qui est assez solide"],
   "decision.next_action": ["Next action", "Prochaine action"],
   // --- enum labels rendered from stored values -----------------------------

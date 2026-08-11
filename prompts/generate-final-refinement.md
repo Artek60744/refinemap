@@ -23,11 +23,11 @@ Produce a decision report:
   - `recommendation`: exactly one of:
     - `go` — the confirmed facts cover the critical axes, remaining unknowns are
       non-blocking, and the identified risks have plausible mitigations.
-    - `explore` — one or more unknowns are decision-critical and the questioning
-      could not resolve them; name them in the reasons.
-    - `rework` — the subject as framed contains contradictions or structural
-      objections (confirmed facts vs. stated goal mismatch); it must be reframed
-      before any go/no-go.
+    - `explore` — the decision is gated by MISSING INFORMATION: one or more unknowns
+      are decision-critical and the questioning could not resolve them.
+    - `rework` — the subject as framed is broken: a confirmed fact contradicts the
+      stated goal, or the framing is inconsistent with itself. Reserve `rework` for
+      this. Missing information alone is never a `rework` — it is an `explore`.
     - `drop` — the risks or dependencies outweigh the stated value, or a confirmed
       fact invalidates the objective.
   - `confidence`: `low`, `medium` or `high` — the solidity of YOUR recommendation,
@@ -35,18 +35,33 @@ Produce a decision report:
     identified blockers is a high-confidence recommendation. Do NOT copy the
     `confidence` field from the context.
   - `reasons`: 2 to 4 reasons maximum, blunt, each citing a specific fact, risk or
-    unknown. No diplomatic prose.
-  - `blockers`: the 1 to 3 conditions that ACTUALLY prevent moving forward — not an
-    exhaustive list of everything fuzzy. Framing questions only, no implementation
+    unknown.
+    - `reasons[0]` is THE ROOT CAUSE: the single item which, if it were resolved,
+      would change your recommendation. Name it, do not describe it. One cause, not
+      a family of concerns.
+    - The following reasons are secondary and must be strictly less decisive than
+      the first. If a reason is as decisive as `reasons[0]`, you picked the wrong
+      root cause.
+    - Never a bookkeeping reason ("3 confirmed facts against 5 unknowns"): counting
+      is a meeting report, not a judgment.
+    - For `explore` and `rework`, the reasons must make the flip condition explicit —
+      what exactly would turn this verdict into a `go`.
+  - `blockers`: what ACTUALLY gates the decision. ONE main blocker in `blockers[0]`,
+    plus at most one secondary blocker — nothing more. A minor clarification is not
+    a blocker: it goes to `openQuestions`. Framing questions only, no implementation
     details. Empty for an unreserved `go`.
   - `strengths`: what is already validated and justifies not dropping the idea.
     Never repeat items from `reasons` or `blockers`.
-  - `nextAction`: ONE priority action, imperative form. Never more than one.
+  - `nextAction`: ONE priority action, imperative form, aimed at `blockers[0]` — the
+    root cause, never a peripheral detail. Never more than one action.
 
 Rules:
 
 - Base the output on confirmed facts first; keep assumptions visible.
 - Do not invent details that were never provided.
+- Banned in the decision report: hedging fillers such as "it would be worth
+  clarifying", "it would be desirable", "several points remain to be specified".
+  Name the point, say what it blocks, move on.
 - Keep everything in the requested `language`.
 - Lowercase values only for `recommendation` and `confidence`; emit no keys other
   than those in the skeleton below.
@@ -63,8 +78,8 @@ Return strict JSON only:
   "decisionReport": {
     "recommendation": "go|explore|rework|drop",
     "confidence": "low|medium|high",
-    "reasons": ["<2 to 4 blunt reasons>"],
-    "blockers": ["<1 to 3 real blockers, empty for an unreserved go>"],
+    "reasons": ["<the root cause first, then 1 to 3 secondary reasons>"],
+    "blockers": ["<the main blocker first, one secondary at most, empty for an unreserved go>"],
     "strengths": ["<what is already solid>"],
     "nextAction": "<one priority action>"
   }

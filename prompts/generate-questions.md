@@ -30,17 +30,30 @@ Instructions:
 
 1. Pick the highest-value uncertainties to clarify given what is still unknown.
 2. Produce one focused question per uncertainty, each with a short `why`.
-3. Set `theme` to the grid axis label the question belongs to — for follow-ups, reuse the
+   Every question must force ONE of these four answer shapes — nothing else:
+   - a number or a threshold ("above which volume does this stop being acceptable?");
+   - a binary choice, or a choice between named options;
+   - a named owner (who decides, who maintains);
+   - a testable success condition.
+   A question whose answer could be a paragraph of prose is a failure. "Can you clarify
+   X?" is a failure; "what exact threshold on X turns this subject from explore to go?"
+   is the target.
+3. The `why` must name the DECISION the answer unlocks — "without this we cannot choose
+   between X and Y", not "this would help understand the context". If you cannot name the
+   decision the answer changes, drop the question.
+4. Set `theme` to the grid axis label the question belongs to — for follow-ups, reuse the
    `theme` of the question or answer you are drilling into.
-4. Set `priority` to `high`, `medium`, or `low`.
-5. Give 2 to 4 `suggestions`: short plausible answers (max ~60 characters, no sentence) the
+5. Set `priority` to `high`, `medium`, or `low`. Order the questions by decisional
+   impact: the one whose answer moves the verdict the most comes first.
+6. Give 2 to 4 `suggestions`: short plausible answers (max ~60 characters, no sentence) the
    user can pick in one click. They must be mutually exclusive and realistic for THIS subject
    — concrete values, options or trade-offs, never generic filler like "oui" / "non" / "à
-   définir". If no plausible answer can be inferred from the context, return an empty list
-   rather than inventing one.
-6. If context is already sufficient to write the deliverable, set `stopCriteria=true`
+   définir". For a threshold question they are concrete values; for a choice question they
+   are the named options. If no plausible answer can be inferred from the context, return an
+   empty list rather than inventing one.
+7. If context is already sufficient to write the deliverable, set `stopCriteria=true`
    and keep the list minimal.
-7. Avoid vague questions ("anything else?"). Each question targets one uncertainty and
+8. Avoid vague questions ("anything else?"). Each question targets one uncertainty and
    is answerable by the team.
 
 Return strict JSON only:

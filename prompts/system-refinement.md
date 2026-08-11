@@ -25,3 +25,6 @@ Rules:
    exactly as specified by the schema.
 7. Always return a single strict JSON object matching the requested schema — no prose,
    no markdown, no code fences.
+8. Hierarchize. Every list you emit is ordered by decisional impact, the most decisive
+   item first — never a flat list of equally weighted items. Anything that cannot change
+   the decision does not belong in a decision field; it belongs in the open questions.

@@ -31,7 +31,17 @@ const RECOMMENDATION_STYLES: Record<
   },
 };
 
-function DecisionList({ title, items }: { title: string; items: string[] }) {
+// `firstMarker` flags the leading item as the decisive one — the list is ordered by
+// decisional impact, so the first blocker is the one that gates the verdict.
+function DecisionList({
+  title,
+  items,
+  firstMarker,
+}: {
+  title: string;
+  items: string[];
+  firstMarker?: string;
+}) {
   if (items.length === 0) {
     return null;
   }
@@ -40,7 +50,14 @@ function DecisionList({ title, items }: { title: string; items: string[] }) {
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">{title}</p>
       <ul className="list-disc space-y-1 pl-5 text-sm text-on-surface-variant">
         {items.map((item, index) => (
-          <li key={index}>{item}</li>
+          <li key={index}>
+            {index === 0 && firstMarker && (
+              <span className="mr-1.5 rounded border border-border-subtle bg-surface px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface">
+                {firstMarker}
+              </span>
+            )}
+            {item}
+          </li>
         ))}
       </ul>
     </div>
@@ -56,6 +73,17 @@ export default function DecisionReportView({
 }) {
   const { t, label } = useI18n();
   const styles = RECOMMENDATION_STYLES[report.recommendation] ?? RECOMMENDATION_STYLES.explore;
+
+  // reasons[0] is the root cause: the one item that, once lifted, flips the verdict.
+  const [rootCause, ...secondaryReasons] = report.reasons;
+  // A verdict short of a go carries its own flip condition, derived from the blockers.
+  const conditionalGo =
+    (report.recommendation === "explore" || report.recommendation === "rework") &&
+    report.blockers.length > 0
+      ? report.blockers.length === 1
+        ? t("decision.conditional_go_one")
+        : t("decision.conditional_go_many", { count: report.blockers.length })
+      : null;
 
   const header = (
     <div className="flex flex-wrap items-center gap-2">
@@ -92,9 +120,13 @@ export default function DecisionReportView({
           {t("decision.title")}
         </p>
         {header}
-        {report.reasons.length > 0 && (
+        {conditionalGo && (
+          <p className="mt-2 text-sm font-medium text-on-surface">{conditionalGo}</p>
+        )}
+        {rootCause && (
           <p className="mt-2 text-sm leading-relaxed text-on-surface-variant line-clamp-3">
-            {report.reasons[0]}
+            <span className="font-semibold text-on-surface">{t("decision.root_cause")} : </span>
+            {rootCause}
           </p>
         )}
         {nextAction}
@@ -108,9 +140,24 @@ export default function DecisionReportView({
         {t("decision.title")}
       </p>
       {header}
+      {conditionalGo && (
+        <p className="mt-3 text-sm font-medium text-on-surface">{conditionalGo}</p>
+      )}
       <div className="mt-4 space-y-4">
-        <DecisionList title={t("decision.reasons")} items={report.reasons} />
-        <DecisionList title={t("decision.blockers")} items={report.blockers} />
+        {rootCause && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">
+              {t("decision.root_cause")}
+            </p>
+            <p className="text-sm font-medium leading-relaxed text-on-surface">{rootCause}</p>
+          </div>
+        )}
+        <DecisionList title={t("decision.secondary_reasons")} items={secondaryReasons} />
+        <DecisionList
+          title={t("decision.blockers")}
+          items={report.blockers}
+          firstMarker={report.blockers.length > 1 ? t("decision.main_blocker") : undefined}
+        />
         <DecisionList title={t("decision.strengths")} items={report.strengths} />
       </div>
       {nextAction}
