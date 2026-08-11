@@ -4,6 +4,11 @@ Ce document décrit le modèle relationnel cible du produit « decision board »
 le schéma depuis le POC de refinement de tickets vers le domaine
 **workspace / board / node / score / export**.
 
+> **Note** : l'enum de décision à 3 valeurs (`GO`/`EXPLORE`/`DROP`) utilisé ci-dessous
+> est remplacé par l'enum à 4 valeurs `go`/`explore`/`rework`/`drop` introduit avec le
+> rapport de décision du livrable final (`decisionReport`,
+> `contracts/final-refinement.schema.json`).
+
 ## Principes de conception
 
 - PostgreSQL est la source de vérité

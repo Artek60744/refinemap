@@ -42,6 +42,37 @@
     "openQuestions": {
       "type": "array",
       "items": { "type": "string" }
+    },
+    "decisionReport": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "recommendation",
+        "confidence",
+        "reasons",
+        "blockers",
+        "strengths",
+        "nextAction"
+      ],
+      "properties": {
+        "recommendation": { "enum": ["go", "explore", "rework", "drop"] },
+        "confidence": { "enum": ["low", "medium", "high"] },
+        "reasons": {
+          "type": "array",
+          "maxItems": 4,
+          "items": { "type": "string" }
+        },
+        "blockers": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "type": "string" }
+        },
+        "strengths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "nextAction": { "type": "string" }
+      }
     }
   }
 }

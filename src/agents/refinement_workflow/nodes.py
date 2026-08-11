@@ -28,6 +28,8 @@ def _base_context(state: dict[str, Any]) -> dict[str, Any]:
         "unknowns": state.get("unknowns", []),
         "dependencies": state.get("dependencies", []),
         "risks": state.get("risks", []),
+        "confidence": state.get("confidence", "low"),
+        "enough_context": state.get("enough_context", False),
     }
 
 

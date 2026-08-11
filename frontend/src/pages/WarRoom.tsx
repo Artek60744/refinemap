@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { exportUrl, getSession, setSessionMode, submitAnswers } from "../api/refinement";
+import DecisionReportView from "../components/DecisionReportView";
 import { GRID_LABELS } from "../constants/grids";
 import { useI18n } from "../i18n";
 import type { QuestionItem, QuestionRoundModel, SessionDetailResponse } from "../types/api";
@@ -891,6 +892,10 @@ export default function WarRoom() {
             <h1 className="mb-4 border-b border-border-subtle pb-2 font-headline-md text-2xl text-on-surface">
               {subject.title}
             </h1>
+
+            {deliverable?.decisionReport && (
+              <DecisionReportView report={deliverable.decisionReport} variant="banner" />
+            )}
 
             {tab === "brief" &&
               (deliverable ? (

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
@@ -64,12 +65,58 @@ class PlanStep(StrictModel):
     detail: str = ""
 
 
+DecisionRecommendation = Literal["go", "explore", "rework", "drop"]
+
+
+class DecisionReport(StrictModel):
+    """Explicit verdict closing the refinement: not a summary, an arbitration."""
+
+    recommendation: DecisionRecommendation = "explore"
+    # Solidity of the verdict itself, not of the project context.
+    confidence: str = "low"
+    # 2-4 blunt reasons, each citing a specific fact/risk/unknown.
+    reasons: list[str] = Field(default_factory=list)
+    # The 1-3 conditions that actually prevent moving forward (framing, not implementation).
+    blockers: list[str] = Field(default_factory=list)
+    # What is already validated and justifies not dropping the idea.
+    strengths: list[str] = Field(default_factory=list)
+    # The single priority action, imperative form.
+    nextAction: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_v1(cls, data: object) -> object:
+        # Sessions finalized with the first report format persisted rationale /
+        # changeTriggers / objections / validationConditions; map them so stored
+        # payloads keep validating under extra="forbid".
+        if not isinstance(data, dict) or "rationale" not in data:
+            return data
+        migrated = dict(data)
+        rationale = migrated.pop("rationale", "")
+        triggers = migrated.pop("changeTriggers", [])
+        objections = migrated.pop("objections", [])
+        conditions = migrated.pop("validationConditions", [])
+        migrated.setdefault("reasons", [rationale] if rationale else [])
+        blockers = list(triggers) + [item for item in conditions if item not in triggers]
+        migrated.setdefault("blockers", blockers)
+        migrated.setdefault("strengths", list(objections))
+        migrated.setdefault("nextAction", "")
+        return migrated
+
+    @field_validator("recommendation", "confidence", mode="before")
+    @classmethod
+    def _normalize(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
+
+
 class RefinementDeliverable(StrictModel):
     summary: str = ""
     brief: list[BriefSection] = Field(default_factory=list)
     plan: list[PlanStep] = Field(default_factory=list)
     codeDraft: str | None = None
     openQuestions: list[str] = Field(default_factory=list)
+    # None on sessions finalized before decision reports existed.
+    decisionReport: DecisionReport | None = None
 
 
 # --- session ---------------------------------------------------------------

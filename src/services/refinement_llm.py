@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 from src.api.schemas_refinement import (
     BriefSection,
+    DecisionReport,
     DetectModeOutput,
     GenerateQuestionsOutput,
     PlanStep,
@@ -175,6 +176,9 @@ class MockRefinementLLM:
 
         facts = self._dedupe(list(context.get("facts", [])))
         unknowns = self._dedupe(list(context.get("unknowns", [])))
+        assumptions = self._dedupe(list(context.get("assumptions", [])))
+        risks = self._dedupe(list(context.get("risks", [])))
+        confidence = context.get("confidence", "low")
 
         # Group answered questions under their theme (grid axis) -> Brief sections.
         asked = {item["id"]: item for item in context.get("asked_questions", [])}
@@ -209,6 +213,88 @@ class MockRefinementLLM:
             plan=plan,
             codeDraft=code_draft,
             openQuestions=unknowns,
+            decisionReport=self._build_decision_report(
+                facts=facts,
+                unknowns=unknowns,
+                assumptions=assumptions,
+                risks=risks,
+                confidence=confidence,
+                grid=grid,
+            ),
+        )
+
+    def _build_decision_report(
+        self,
+        *,
+        facts: list[str],
+        unknowns: list[str],
+        assumptions: list[str],
+        risks: list[str],
+        confidence: str,
+        grid: str,
+    ) -> DecisionReport:
+        # Deterministic arbitration rules, evaluated in order. The confidence is the
+        # solidity of the verdict: a drop forced by an empty fact base is a firm call.
+        if not facts and len(unknowns) >= 3:
+            recommendation, decision_confidence = "drop", "high"
+        elif not unknowns and confidence == "high" and len(risks) <= 1:
+            recommendation, decision_confidence = "go", "high"
+        elif len(risks) >= 3 or len(risks) > len(facts):
+            recommendation, decision_confidence = "rework", "medium"
+        else:
+            recommendation = "explore"
+            decision_confidence = "medium"
+
+        reasons = [
+            f"{len(facts)} faits confirmés contre {len(unknowns)} zones d'incertitude."
+        ]
+        if unknowns:
+            reasons.append(f"Inconnue décision-critique non levée : {unknowns[0]}")
+        if risks:
+            reasons.append(f"{len(risks)} risques identifiés, dont : {risks[0]}")
+        if assumptions:
+            reasons.append(f"{len(assumptions)} hypothèses restent non vérifiées, dont : {assumptions[0]}")
+        if len(reasons) == 1:
+            reasons.append("Aucun risque ni inconnue résiduelle : le sujet est actionnable.")
+
+        blockers = [] if recommendation == "go" else [
+            f"Lever l'inconnue : {unknown}" for unknown in unknowns[:3]
+        ]
+        if recommendation == "rework" and not blockers:
+            blockers = [f"Traiter le risque : {risk}" for risk in risks[:3]]
+
+        strengths = facts[:3]
+        if not strengths:
+            strengths = [f"Le périmètre est cadré par la grille {grid.upper()}."]
+
+        if recommendation == "go":
+            next_action = "Lancer la mise en œuvre du plan proposé."
+        elif recommendation == "explore":
+            next_action = (
+                f"Répondre en priorité à : {unknowns[0]}"
+                if unknowns
+                else "Vérifier les hypothèses restantes avec les parties prenantes."
+            )
+        elif recommendation == "rework":
+            next_action = (
+                f"Reformuler le sujet en traitant : {risks[0]}"
+                if risks
+                else "Reformuler le sujet pour lever les contradictions du cadrage."
+            )
+        else:
+            next_action = (
+                f"Ne pas poursuivre en l'état ; réévaluer si « {unknowns[0]} » est levée."
+                if unknowns
+                else "Ne pas poursuivre en l'état."
+            )
+
+        return DecisionReport(
+            recommendation=recommendation,
+            confidence=decision_confidence,
+            reasons=reasons[:4],
+            blockers=blockers[:3],
+            strengths=strengths,
+            nextAction=next_action,
         )
 
     # -- helpers --

@@ -12,6 +12,26 @@ def render_deliverable_markdown(subject: SubjectModel, deliverable: RefinementDe
         lines.append(deliverable.summary)
         lines.append("")
 
+    decision = deliverable.decisionReport
+    if decision is not None:
+        lines.append("## Decision")
+        lines.append(f"**{decision.recommendation.upper()}** — confidence: {decision.confidence}")
+        lines.append("")
+        for heading, items in (
+            ("Why", decision.reasons),
+            ("Real blockers", decision.blockers),
+            ("What is already solid", decision.strengths),
+        ):
+            if items:
+                lines.append(f"### {heading}")
+                for item in items:
+                    lines.append(f"- {item}")
+                lines.append("")
+        if decision.nextAction:
+            lines.append("### Next action")
+            lines.append(decision.nextAction)
+            lines.append("")
+
     lines.append("## Brief")
     for section in deliverable.brief:
         lines.append(f"### {section.heading}")

@@ -51,12 +51,25 @@ export interface PlanStep {
   detail: string;
 }
 
+export type DecisionRecommendation = "go" | "explore" | "rework" | "drop";
+
+export interface DecisionReport {
+  recommendation: DecisionRecommendation;
+  confidence: string;
+  reasons: string[];
+  blockers: string[];
+  strengths: string[];
+  nextAction: string;
+}
+
 export interface RefinementDeliverable {
   summary: string;
   brief: BriefSection[];
   plan: PlanStep[];
   codeDraft: string | null;
   openQuestions: string[];
+  // null on sessions finalized before decision reports existed.
+  decisionReport: DecisionReport | null;
 }
 
 export interface SessionModel {
