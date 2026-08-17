@@ -383,6 +383,7 @@ def _repair_json_text(text: str) -> str:
     text = re.sub(r"([{,])\s*'([^']*)'\s*:", r'\1 "\2":', text)
     text = re.sub(r":\s*'([^']*)'", r': "\1"', text)
     text = re.sub(r'"([^"\\]*(\\.[^"\\]*)*)"\s+(?=")', r'"\1", ', text)
+    text = re.sub(r'([}\]"])\s+(?=")', r"\1, ", text)
     return text
 
 
@@ -478,42 +479,53 @@ class OpenAICompatibleLLM:
         # DeepSeek's thinking-capable models (deepseek-v4-*) reason by default, and the
         # reasoning tokens count against max_tokens — on large contexts they can exhaust
         # the budget and leave `content` empty, which degrades the whole round to the
-        # offline fallback. Curb the effort so reasoning stays short and content is always
-        # emitted. (temperature is silently ignored while thinking is enabled.)
+        # offline fallback. Curb the effort so reasoning stays short, and raise the
+        # budget well above the observed reasoning burn (~3k tokens at "low").
+        # (temperature is silently ignored while thinking is enabled.)
         if self.provider == "deepseek":
             body["reasoning_effort"] = "low"
+            body["max_tokens"] = max(body["max_tokens"], 8000)
 
-        async with httpx.AsyncClient(timeout=90.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(self._url(), headers=self._headers(), json=body)
             response.raise_for_status()
             payload = response.json()
-        content = payload["choices"][0]["message"]["content"]
+        content = payload["choices"][0]["message"]["content"] or ""
+        finish_reason = payload["choices"][0].get("finish_reason")
 
         try:
             return _extract_json(content)
         except json.JSONDecodeError as exc:
             # One corrective retry: the model already produced the right content, it
             # only broke the encoding — asking it to re-emit valid JSON usually saves
-            # the round instead of dropping to the offline fallback.
+            # the round instead of dropping to the offline fallback. When the response
+            # hit the token cap, double the budget and ask for the bare JSON only.
+            if finish_reason == "length":
+                retry_prompt = (
+                    f"Your previous response was cut off (max_tokens reached) and is not valid JSON ({exc}). "
+                    "Do NOT reason about this: emit ONLY the final JSON object, complete and valid. "
+                    'Escape every double quote inside string values as \\" (or replace it with « »). '
+                    "No prose, no code fences."
+                )
+                body["max_tokens"] = min(body["max_tokens"] * 2, 16384)
+            else:
+                retry_prompt = (
+                    f"Your previous response is not valid JSON ({exc}). Re-emit the exact same content "
+                    'as ONE valid JSON object. Escape every double quote inside string values as \\" '
+                    "(or replace it with « »). No prose, no code fences."
+                )
             logger.warning("Invalid JSON from %s (%s); asking the model to re-emit it.", self.model_name, exc)
             body["messages"] = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user},
                 {"role": "assistant", "content": content},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Your previous response is not valid JSON ({exc}). Re-emit the exact same content "
-                        'as ONE valid JSON object. Escape every double quote inside string values as \\" '
-                        "(or replace it with « »). No prose, no code fences."
-                    ),
-                },
+                {"role": "user", "content": retry_prompt},
             ]
-            async with httpx.AsyncClient(timeout=90.0) as client:
+            async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(self._url(), headers=self._headers(), json=body)
                 response.raise_for_status()
                 payload = response.json()
-            return _extract_json(payload["choices"][0]["message"]["content"])
+            return _extract_json(payload["choices"][0]["message"]["content"] or "")
 
     def _system(self) -> str:
         return self.prompt_loader.load("system-refinement")

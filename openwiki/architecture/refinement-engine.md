@@ -1,7 +1,7 @@
 ---
 type: Architecture
-title: The Refinement Engine — LangGraph Workflow and LLM Layer
-description: The differentiating core of RefineMap — the LangGraph state machine (generate questions, summarize context, final refinement, extract memory), its routing rules, the RefinementState shape, and the two LLM engines with JSON repair, retry and offline fallback.
+title: Le moteur de raffinement — workflow LangGraph et couche LLM
+description: Le cœur différenciateur de RefineMap — la machine à états LangGraph (générer des questions, résumer le contexte, raffinement final, extraire la mémoire), ses règles de routage, la forme de RefinementState, et les deux moteurs LLM avec réparation JSON, nouvelle tentative et repli hors ligne.
 tags: [architecture, langgraph, llm, workflow]
 openwiki:
   roles: [architecture]
@@ -13,19 +13,19 @@ openwiki:
   validation_commands: [python -m pytest tests/test_routing.py tests/test_mock_decision.py -q]
 ---
 
-# The Refinement Engine — LangGraph Workflow and LLM Layer
+# Le moteur de raffinement — workflow LangGraph et couche LLM
 
-The refinement loop is a **LangGraph state machine**, not a free chat: every session
-walks the same explicit graph, every LLM step returns structured JSON validated by
-Pydantic, and the graph never persists anything itself — the repository does, after
-each node's output is validated. The `thread_id` LangGraph checkpoint is aligned on
-the session id so one graph instance carries the whole conversation.
+La boucle de raffinement est une **machine à états LangGraph**, pas un chat libre : chaque session
+parcourt le même graphe explicite, chaque étape LLM renvoie un JSON structuré validé par
+Pydantic, et le graphe ne persiste jamais rien lui-même — c'est le repository qui persiste, après
+validation de la sortie de chaque nœud. Le point de contrôle `thread_id` de LangGraph est aligné sur
+l'identifiant de session si bien qu'une seule instance du graphe porte toute la conversation.
 
-## The graph (`src/agents/refinement_workflow/graph.py`)
+## Le graphe (`src/agents/refinement_workflow/graph.py`)
 
-Four nodes, all fed by the same `RefinementState` (a `TypedDict`, created by
-`create_initial_state` or rebuilt from the session by
-`RefinementService._build_state_from_session`):
+Quatre nœuds, tous alimentés par le même `RefinementState` (un `TypedDict`, créé par
+`create_initial_state` ou reconstruit à partir de la session par
+`RefinementService._build_state_from_session`) :
 
 <!-- openwiki: mermaid parse failed and this diagram was converted to a text fence so it does not break rendering. Fix the diagram source and restore the mermaid fence. Parser error: Heuristic: an unescaped angle bracket inside a label breaks rendering; rephrase the label. -->
 ```text
@@ -43,122 +43,125 @@ flowchart TD
     M --> FIN["end"]
 ```
 
-- **`generate_questions`** — calls `llm.generate_questions` with the grid axes as
-  the backbone, bumps `round`, and stores `latest_question_round` plus a provisional
-  `decision` (enoughContext false, reasoning from the round). Entry point for
-  session start (`workflow_action=start_session`) and for each new round.
-- **`summarize_context`** — synthesizes facts / assumptions / unknowns /
-  dependencies / risks / confidence / enoughContext from the answered questions.
-  Entry point after `answers_submitted`.
-- **`generate_final_refinement`** — assembles the deliverable
-  (`summary`, `brief`, `plan`, `codeDraft`, `openQuestions`, `decisionReport`) and
-  sets enoughContext true.
-- **`extract_product_memory`** — terminal node: asks the LLM for the memory diff
-  (`memory_ops`) only; persistence belongs to the service. Skipped entirely when the
-  session has no `product_id` (no extra LLM call for a diff that would be discarded).
+- **`generate_questions`** — appelle `llm.generate_questions` avec les axes de la grille comme
+  colonne vertébrale, incrémente `round`, et stocke `latest_question_round` ainsi qu'une
+  `decision` provisoire (enoughContext false, raisonnement issu du tour). Point d'entrée pour
+  le démarrage de session (`workflow_action=start_session`) et pour chaque nouveau tour.
+- **`summarize_context`** — synthétise facts / assumptions / unknowns / dependencies /
+  risks / confidence / enoughContext à partir des questions répondues.
+  Point d'entrée après `answers_submitted`.
+- **`generate_final_refinement`** — assemble le livrable
+  (`summary`, `brief`, `plan`, `codeDraft`, `openQuestions`, `decisionReport`) et
+  met enoughContext à true.
+- **`extract_product_memory`** — nœud terminal : demande au LLM uniquement le diff mémoire
+  (`memory_ops`) ; la persistance appartient au service. Entièrement ignoré lorsque la
+  session n'a pas de `product_id` (aucun appel LLM supplémentaire pour un diff qui serait de
+  toute façon écarté).
 
-### Routing rules (pinned by `tests/test_routing.py`)
+### Règles de routage (fixées par `tests/test_routing.py`)
 
-`route_after_summary` is deliberately conservative — "the LLM tends to declare
-enoughContext too early":
+La fonction `route_after_summary` est volontairement conservatrice — « le LLM a tendance à
+déclarer enoughContext trop tôt » :
 
-- `min_rounds = min(state.min_rounds, state.max_rounds)` — the floor never exceeds
-  the cap;
-- finalize when `round >= max_rounds`, or when `enoughContext` and
-  `round >= min_rounds`; otherwise ask another round.
+- `min_rounds = min(state.min_rounds, state.max_rounds)` — le plancher ne dépasse jamais le plafond ;
+- finaliser quand `round >= max_rounds`, ou quand `enoughContext` et
+  `round >= min_rounds` ; sinon, demander un autre tour.
 
-## The service side (`src/services/refinement_service.py`)
+## Le côté service (`src/services/refinement_service.py`)
 
-`RefinementService` owns the lifecycle boundary between the API and the graph:
+`RefinementService` gère la frontière du cycle de vie entre l'API et le graphe :
 
-- `start_session` — resolves product + grid, creates the session row + subject
-  snapshot, loads active memory facts, invokes the graph with
-  `workflow_action=start_session`, persists the resulting round and a **derived
-  round-0 summary** (unknowns <- missingAreas, risks <- potentialRisks), and
-  returns the first round with the injected `productMemory`.
-- `submit_answers` — records answers (repository upserts per question), rebuilds the
-  full state from the session (questions paired with answers so the LLM never has to
-  join them), invokes the graph with `workflow_action=answers_submitted`, then
-  persists whichever terminal output came back: a new `latest_question_round` or the
-  `deliverable`. When a deliverable exists **and** the session has a product, it
-  applies `memory_ops` through `ProductMemoryRepository.apply_ops` in the same
-  request, then sets `FINAL_READY`.
-- `set_mode` — normalize grid, `reset_rounds` (purge + replay round 0) with memory
-  re-injected, since the replay would otherwise lose inherited facts.
-- `export_markdown` — renders the persisted deliverable via
-  [decision-report.md](../domain/decision-report.md)'s renderer.
+- `start_session` — résout le produit + la grille, crée la ligne de session + un instantané du
+  sujet, charge les faits mémoire actifs, invoque le graphe avec
+  `workflow_action=start_session`, persiste le tour obtenu et un **résumé dérivé du tour 0**
+  (unknowns <- missingAreas, risks <- potentialRisks), puis renvoie le premier tour avec le
+  `productMemory` injecté.
+- `submit_answers` — enregistre les réponses (le repository effectue les upserts par question),
+  reconstruit l'état complet à partir de la session (questions appariées aux réponses, afin que le
+  LLM n'ait jamais à les joindre), invoque le graphe avec `workflow_action=answers_submitted`,
+  puis persiste la sortie terminale reçue : un nouveau `latest_question_round` ou le
+  `deliverable`. Lorsqu'un livrable existe **et** que la session a un produit, il applique
+  `memory_ops` via `ProductMemoryRepository.apply_ops` dans la même requête, puis positionne
+  `FINAL_READY`.
+- `set_mode` — normalise la grille, `reset_rounds` (purge + rejeu du tour 0) avec
+  réinjection de la mémoire, car le rejeu perdrait sinon les faits hérités.
+- `export_markdown` — rend le livrable persisté via le moteur de rendu de
+  [decision-report.md](../domain/decision-report.md).
 
-## The LLM layer (`src/services/refinement_llm.py`)
+## La couche LLM (`src/services/refinement_llm.py`)
 
-Two engines implement the same `RefinementLLM` Protocol
+Deux moteurs implémentent le même protocole `RefinementLLM`
 (`detect_mode`, `generate_questions`, `summarize_context`,
-`generate_final_refinement`, `extract_product_memory`):
+`generate_final_refinement`, `extract_product_memory`) :
 
-- **`MockRefinementLLM`** — deterministic offline engine: templates questions from
-  the grid axes (round 1) or from `unknowns` (later rounds), offers only the two
-  utility chips ("Je ne sais pas encore", "Sans objet pour ce sujet"), derives
-  summary confidence from unknowns, builds the Brief by grouping answered questions
-  under their grid-axis theme, produces a Code Draft skeleton for
-  `technique`/`hybride` grids, applies the deterministic arbitration rules for the
-  decision report, and promotes durable facts to memory with `add` ops only. It is
-  the default provider (`LLM_PROVIDER=mock`) and the safety net for every real-call
-  failure.
-- **`OpenAICompatibleLLM`** — calls any OpenAI-compatible `/chat/completions`
-  endpoint via httpx (Azure `azure-openai`/`azure-foundry` use the
-  `/openai/deployments/{deployment}/chat/completions?api-version=2024-06-01` shape
-  and the `api-key` header; OpenAI/OpenRouter/DeepSeek use Bearer auth). It asks for
-  "a single strict JSON object", then:
-  1. parses with `_extract_json` (strips code fences, slices the outermost braces,
-     applies `_repair_json_text` for trailing commas, single quotes, and missing
-     commas between strings);
-  2. on JSON decode failure, retries **once** by asking the model to re-emit the
-     exact same content as valid JSON;
-  3. on any remaining failure (network, invalid JSON, schema mismatch), degrades to
-     `MockRefinementLLM` and sets `self.degraded = True` so the API returns
-     `degraded: true` and the UI shows the fallback banner.
-  Provider quirks: DeepSeek gets `reasoning_effort: "low"` because thinking tokens
-  count against `max_tokens` and can exhaust the budget; the final refinement gets a
-  `max(settings.llm_max_tokens, 8000)` budget to avoid truncating the largest
-  output.
+- **`MockRefinementLLM`** — moteur hors ligne déterministe : génère des questions types à partir
+  des axes de la grille (tour 1) ou des `unknowns` (tours ultérieurs), ne propose que les deux
+  chips utilitaires (« Je ne sais pas encore », « Sans objet pour ce sujet »), dérive la confiance
+  du résumé des `unknowns`, construit le Brief en regroupant les questions répondues sous leur
+  thème d'axe de grille, produit un squelette de Code Draft pour les grilles
+  `technique`/`hybride`, applique les règles d'arbitrage déterministes pour le rapport de décision,
+  et ne promeut en mémoire que les faits durables avec des opérations `add` uniquement.
+  C'est le fournisseur par défaut (`LLM_PROVIDER=mock`) et le filet de sécurité pour toute
+  défaillance d'appel réel.
+- **`OpenAICompatibleLLM`** — appelle tout endpoint `/chat/completions` compatible OpenAI via
+  httpx (Azure `azure-openai`/`azure-foundry` utilisent la forme
+  `/openai/deployments/{deployment}/chat/completions?api-version=2024-06-01` et l'en-tête
+  `api-key` ; OpenAI/OpenRouter/DeepSeek utilisent l'authentification Bearer). Il demande
+  « un unique objet JSON strict », puis :
+  1. parse avec `_extract_json` (supprime les délimiteurs de code, extrait entre les accolades
+     les plus externes, applique `_repair_json_text` pour les virgules finales, les guillemets
+     simples et les virgules manquantes entre chaînes) ;
+  2. en cas d'échec du décodage JSON, réessaie **une fois** en demandant au modèle de réémettre
+     exactement le même contenu en JSON valide ;
+  3. en cas de tout autre échec (réseau, JSON invalide, non-conformité au schéma), bascule en mode
+     dégradé vers `MockRefinementLLM` et positionne `self.degraded = True` afin que l'API renvoie
+     `degraded: true` et que l'interface utilisateur affiche la bannière de repli.
+  Particularités des fournisseurs : DeepSeek reçoit `reasoning_effort: "low"` car les jetons de
+  réflexion sont déduits de `max_tokens` et peuvent épuiser le budget ; le raffinement final
+  dispose d'un budget `max(settings.llm_max_tokens, 8000)` pour éviter de tronquer la sortie la
+  plus volumineuse.
 
 ## Prompts (`prompts/`)
 
-Six Markdown prompts are loaded by `PromptLoader` (`prompts_dir` from settings,
-version = sha1 over all prompt files, stored on the session as `prompt_version`):
+Six prompts Markdown sont chargés par `PromptLoader` (`prompts_dir` depuis les paramètres,
+version = sha1 sur l'ensemble des fichiers de prompts, stockée sur la session sous
+`prompt_version`) :
 
-| Prompt | Node | Output schema |
+| Prompt | Nœud | Schéma de sortie |
 |---|---|---|
-| `system-refinement.md` | system prompt for every call | rules: no invented context, grid adaptation, product_memory treated as acquired context, JSON-only, lists ordered by decisional impact |
-| `detect-mode.md` | grid detection (auto mode) | `DetectModeOutput` |
+| `system-refinement.md` | prompt système pour chaque appel | règles : aucun contexte inventé, adaptation à la grille, product_memory traité comme contexte acquis, JSON uniquement, listes ordonnées par impact décisionnel |
+| `detect-mode.md` | détection de la grille (mode auto) | `DetectModeOutput` |
 | `generate-questions.md` | generate_questions | `GenerateQuestionsOutput` |
 | `summarize-context.md` | summarize_context | `SessionSummaryOutput` |
 | `generate-final-refinement.md` | generate_final_refinement | `RefinementDeliverableOutput` |
-| `extract-product-memory.md` | extract_product_memory | `ProductMemoryOpsOutput` — the durability rule, diff-not-dump, exact category list |
+| `extract-product-memory.md` | extract_product_memory | `ProductMemoryOpsOutput` — la règle de durabilité, diff plutôt que dump, liste exacte des catégories |
 
-Changing a prompt changes `prompt_version`, which is recorded per session — bump it
-deliberately, and check the JSON Schema in `contracts/` matches the new output shape.
+Modifier un prompt modifie `prompt_version`, enregistrée par session — incrémentez-la
+délibérément et vérifiez que le JSON Schema dans `contracts/` correspond à la nouvelle forme de
+sortie.
 
-## Change guidance
+## Directives de modification
 
-- **When to consult this page:** touching graph topology/routing, state shape, LLM
-  calls, prompt files, or the service orchestration.
-- **Invariants to preserve:** thread_id = session id; nodes never persist;
-  `min_rounds` clamp; degraded fallback instead of 500; `degraded` flag plumbing to
-  both response schemas; memory extraction skipped without a product; answers are
-  upserted, not appended.
-- **Extension seam — a new graph step:** add the node builder in `nodes.py`, the
-  node in `create_refinement_graph`, the routing function + conditional edges, the
-  state fields in `RefinementState`, the persistence branch in
-  `RefinementService.submit_answers` (and possibly `_run_initial_round`), the LLM
-  method in the Protocol + both engines, the prompt file, and the JSON Schema in
-  `contracts/`. Extend `tests/test_routing.py` for the new branch.
-- **Extension seam — a new LLM provider:** see
-  [llm-configuration.md](../operations/llm-configuration.md) for the full surface
-  (env settings, runtime config fallbacks, URL/headers, required-field test, UI).
-- **Focused tests:** `tests/test_routing.py` (routing matrix) and
-  `tests/test_mock_decision.py` (verdict rules); the mock's question/summary
-  behavior is exercised through these indirectly — a dedicated mock-engine test
-  file is a natural addition when the engine changes.
-- **Validation:** `python -m pytest tests/test_routing.py tests/test_mock_decision.py -q`;
-  full offline flow smoke test: `uvicorn src.main:app --reload --port 8000` then
-  `POST /api/refinement/sessions` with `{"objective": "..."}` (mock provider).
+- **Quand consulter cette page :** lorsque vous touchez à la topologie/au routage du graphe, à la
+  structure de l'état, aux appels LLM, aux fichiers de prompts ou à l'orchestration du service.
+- **Invariants à préserver :** thread_id = identifiant de session ; les nœuds ne persistent jamais ;
+  le plafonnement de `min_rounds` ; repli dégradé au lieu d'une erreur 500 ; propagation du drapeau
+  `degraded` dans les deux schémas de réponse ; extraction mémoire ignorée sans produit ; les
+  réponses sont upsertées, pas ajoutées.
+- **Point d'extension — une nouvelle étape de graphe :** ajoutez le constructeur de nœud dans
+  `nodes.py`, le nœud dans `create_refinement_graph`, la fonction de routage et les arêtes
+  conditionnelles, les champs d'état dans `RefinementState`, la branche de persistance dans
+  `RefinementService.submit_answers` (et éventuellement `_run_initial_round`), la méthode LLM dans
+  le protocole et les deux moteurs, le fichier de prompt, et le JSON Schema dans `contracts/`.
+  Étendez `tests/test_routing.py` pour la nouvelle branche.
+- **Point d'extension — un nouveau fournisseur LLM :** consultez
+  [llm-configuration.md](../operations/llm-configuration.md) pour la surface complète
+  (paramètres d'environnement, replis de configuration à l'exécution, URL/en-têtes, test du champ
+  requis, UI).
+- **Tests ciblés :** `tests/test_routing.py` (matrice de routage) et
+  `tests/test_mock_decision.py` (règles de verdict) ; le comportement questions/résumé du mock
+  est exercé indirectement à travers ces tests — un fichier de test dédié au moteur mock est un
+  ajout naturel lorsque le moteur change.
+- **Validation :** `python -m pytest tests/test_routing.py tests/test_mock_decision.py -q` ;
+  test de fumée du flux hors ligne complet : `uvicorn src.main:app --reload --port 8000` puis
+  `POST /api/refinement/sessions` avec `{"objective": "..."}` (fournisseur mock).

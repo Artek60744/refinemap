@@ -1,7 +1,7 @@
 ---
-type: Operations
-title: Deployment, Docker and the Azure VM
-description: How RefineMap is deployed on its Azure VM — the deploy.sh workflow (dev sync vs prod deploy), the three Docker containers, cost control, what is never overwritten, transport channels, and the documented security limits.
+type: Opérations
+title: Déploiement, Docker et la VM Azure
+description: Comment RefineMap est déployé sur sa VM Azure — le flux deploy.sh (sync en dev vs deploy en prod), les trois conteneurs Docker, le contrôle des coûts, ce qui n'est jamais écrasé, les canaux de transport et les limites de sécurité documentées.
 tags: [operations, deployment, docker, azure, devops]
 openwiki:
   roles: [operations]
@@ -12,24 +12,21 @@ openwiki:
   validation_commands: [./deploy.sh status]
 ---
 
-# Deployment, Docker and the Azure VM
+# Déploiement, Docker et la VM Azure
 
-The application runs in Docker containers on an Azure VM, and every operation goes
-through `./deploy.sh` at the repository root. The full operational guide lives in
-`docs/deployment.md`; this page captures the durable facts and the change-safety
-rules.
+L'application s'exécute dans des conteneurs Docker sur une VM Azure, et toutes les opérations passent par `./deploy.sh` à la racine du dépôt. Le guide opérationnel complet se trouve dans `docs/deployment.md` ; cette page reprend les faits durables et les règles de sécurité des changements.
 
-**Production URL:** http://203.0.113.10/ (no HTTPS — see limits below).
+**URL de production :** http://203.0.113.10/ (pas de HTTPS — voir les limites ci-dessous).
 
-## Containers
+## Conteneurs
 
-| Container | Image | Role |
+| Conteneur | Image | Rôle |
 |---|---|---|
-| `web` | `frontend/Dockerfile` (node build -> nginx:alpine) | Serves the built SPA (see [frontend/overview.md](../frontend/overview.md)) and reverse-proxies `/api` and `/health` to `app`. Listens on port 80. `proxy_read_timeout 300s` because the answers round-trip runs the LLM synchronously. Hashed `/assets/` files are cached immutable; the SPA fallback is `no-cache`. |
-| `app` | `Dockerfile` (python:3.12-slim) | FastAPI + LangGraph, internal to the Docker network, no published port. Runs `uvicorn src.main:app`. |
-| `db` | `postgres:16-alpine` | PostgreSQL 16 with a `pgdata` volume; healthcheck-gated startup. |
+| `web` | `frontend/Dockerfile` (node build -> nginx:alpine) | Sert la SPA construite (voir [frontend/overview.md](../frontend/overview.md)) et agit comme proxy inverse pour `/api` et `/health` vers `app`. Écoute sur le port 80. `proxy_read_timeout 300s` car l'aller-retour des réponses exécute le LLM de manière synchrone. Les fichiers `/assets/` hachés sont mis en cache de façon immuable ; le fallback SPA est `no-cache`. |
+| `app` | `Dockerfile` (python:3.12-slim) | FastAPI + LangGraph, interne au réseau Docker, aucun port publié. Exécute `uvicorn src.main:app`. |
+| `db` | `postgres:16-alpine` | PostgreSQL 16 avec un volume `pgdata` ; démarrage contrôlé par healthcheck. |
 
-## The daily loop
+## La boucle quotidienne
 
 ```bash
 ./deploy.sh dev      # once: switch to hot-reload mode on the VM
@@ -39,74 +36,40 @@ rules.
 ./deploy.sh status   # containers, current mode, disk, memory
 ```
 
-Two modes, memorized on the VM in `.dev-mode`:
+Deux modes, mémorisés sur la VM dans `.dev-mode` :
 
-- **dev** — source mounted from `/opt/refinement` into the container, `uvicorn
-  --reload` (via `docker-compose.dev.yml`), updates via `sync` (file copy only).
-  Hot reload covers the backend only; frontend iteration happens locally with Vite
-  and `sync` rebuilds the `web` image when `frontend/` changed (no-op otherwise,
-  thanks to Docker cache).
-- **prod** — code copied into the image, updates via `./deploy.sh deploy`
-  (send, rebuild, restart). Use `deploy` instead of `sync` whenever
-  `requirements.txt`, the `Dockerfile`, or `docker-compose.yml` changed — those are
-  only honored at image build.
+- **dev** — source montée depuis `/opt/refinement` dans le conteneur, `uvicorn --reload` (via `docker-compose.dev.yml`), mises à jour via `sync` (copie de fichiers uniquement). Le rechargement à chaud ne couvre que le backend ; l'itération frontend se fait localement avec Vite et `sync` reconstruit l'image `web` lorsque `frontend/` a changé (aucune opération sinon, grâce au cache Docker).
+- **prod** — code copié dans l'image, mises à jour via `./deploy.sh deploy` (envoi, reconstruction, redémarrage). Utilisez `deploy` au lieu de `sync` dès que `requirements.txt`, le `Dockerfile` ou `docker-compose.yml` ont changé — ceux-ci ne sont pris en compte qu'à la construction de l'image.
 
-Other commands: `restart`, `down` (containers stop, database preserved), `stop` /
-`start` (deallocate / start the VM to control cost), `env [file]` (write the VM
-`.env`, backing up the old one to `.env.bak`), `ssh`, `health`.
+Autres commandes : `restart`, `down` (arrêt des conteneurs, base de données préservée), `stop` / `start` (libérer / démarrer la VM pour maîtriser les coûts), `env [file]` (écrit le `.env` de la VM, avec sauvegarde de l'ancien dans `.env.bak`), `ssh`, `health`.
 
-## What is never overwritten
+## Ce qui n'est jamais écrasé
 
-- The VM's `.env` (production config incl. a generated `SECRET_KEY`) — excluded from
-  all transfers; only `./deploy.sh env` touches it, with a `.env.bak` copy.
-- Also excluded from syncs: `*.db`, `deploy.env`, `__pycache__`, `.git`, `.venv`,
-  `logs/`.
-- The `pgdata` volume survives `down`, `deploy`, and `stop`; only a manual
-  `docker compose down -v` deletes it.
-- Sync is a mirror: a file deleted locally disappears from the VM on the next
-  `sync`.
+- Le `.env` de la VM (configuration de production incluant une `SECRET_KEY` générée) — exclu de tous les transferts ; seul `./deploy.sh env` y touche, avec une copie `.env.bak`.
+- Sont également exclus des synchronisations : `*.db`, `deploy.env`, `__pycache__`, `.git`, `.venv`, `logs/`.
+- Le volume `pgdata` survit à `down`, `deploy` et `stop` ; seul un `docker compose down -v` manuel le supprime.
+- La synchronisation est un miroir : un fichier supprimé localement disparaît de la VM à la prochaine `sync`.
 
-## Transport and configuration
+## Transport et configuration
 
-Two channels, auto-selected: **SSH** (rsync, fast, streams logs; requires the key
-and an open port 22) and **Azure Run Command API** (base64 of the source tarball in
-the API call; works from blocked networks but takes 1–2 minutes per sync and has a
-~200 KB payload ceiling — `DEPLOY_TRANSPORT=ssh` forces the fast channel). The
-script passes the subscription explicitly on every `az` call because the l'entreprise
-tenant keeps resetting the active CLI subscription.
+Deux canaux, sélectionnés automatiquement : **SSH** (rsync, rapide, diffuse les journaux ; nécessite la clé et un port 22 ouvert) et **Azure Run Command API** (base64 de l'archive source dans l'appel API ; fonctionne depuis des réseaux bloqués mais prend 1 à 2 minutes par synchronisation et plafonne à ~200 Ko de charge utile — `DEPLOY_TRANSPORT=ssh` force le canal rapide). Le script transmet explicitement l'abonnement à chaque appel `az`, car le locataire l'entreprise ne cesse de réinitialiser l'abonnement CLI actif.
 
-Defaults (overridable via environment or a local `deploy.env`): `AZ_SUBSCRIPTION=
-00000000-0000-0000-0000-000000000000`, `AZ_RESOURCE_GROUP=rg-example`,
-`AZ_VM_NAME=vm-example`, `AZ_VM_IP=203.0.113.10`, `AZ_VM_USER=azureuser`,
-`AZ_SSH_KEY=~/.ssh/deploy_key`, `AZ_REMOTE_DIR=/opt/refinement`,
-`DEPLOY_TRANSPORT=auto`.
+Valeurs par défaut (surchargeables via l'environnement ou un `deploy.env` local) : `AZ_SUBSCRIPTION=00000000-0000-0000-0000-000000000000`, `AZ_RESOURCE_GROUP=rg-example`, `AZ_VM_NAME=vm-example`, `AZ_VM_IP=203.0.113.10`, `AZ_VM_USER=azureuser`, `AZ_SSH_KEY=~/.ssh/deploy_key`, `AZ_REMOTE_DIR=/opt/refinement`, `DEPLOY_TRANSPORT=auto`.
 
-## Cost control
+## Contrôle des coûts
 
-VM Standard_B2s (2 vCPU, 4 GB, Ubuntu 22.04) in France Central ≈ 30 €/month
-running continuously out of a ~50 €/month credit; `./deploy.sh stop` during nights
-and weekends roughly divides that by three. Disk (~4 €/month) and the public IP
-(~3 €/month) are billed even while stopped.
+VM Standard_B2s (2 vCPU, 4 Go, Ubuntu 22.04) dans France Central ≈ 30 €/mois en fonctionnement continu sur un crédit d'environ 50 €/mois ; `./deploy.sh stop` pendant les nuits et les week-ends divise approximativement ce montant par trois. Le disque (~4 €/mois) et l'IP publique (~3 €/mois) sont facturés même à l'arrêt.
 
-## Known limits (documented in `docs/deployment.md`)
+## Limites connues (documentées dans `docs/deployment.md`)
 
-- **No HTTPS** — traffic in clear; acceptable for an internal test tool, to be
-  fixed (Caddy + Let's Encrypt + domain) before any real use.
-- **No authentication** — anyone with the IP reaches the app and the settings page.
-- **Schema bootstrapped by `create_all()`** + hand-rolled forward migration, not
-  Alembic (see [data-model.md](../domain/data-model.md)).
-- **Default PostgreSQL credentials** (`postgres`/`postgres`) — not exposed outside
-  the Docker network, but to harden alongside the rest.
-- **Deployments run from the local workstation**, not CI: what ships is your
-  working copy, including uncommitted changes.
+- **Pas de HTTPS** — trafic en clair ; acceptable pour un outil de test interne, à corriger (Caddy + Let's Encrypt + domaine) avant toute utilisation réelle.
+- **Pas d'authentification** — toute personne disposant de l'IP accède à l'application et à la page des paramètres.
+- **Schéma initialisé par `create_all()`** + migration montante écrite à la main, et non Alembic (voir [data-model.md](../domain/data-model.md)).
+- **Identifiants PostgreSQL par défaut** (`postgres`/`postgres`) — non exposés hors du réseau Docker, mais à durcir avec le reste.
+- **Les déploiements s'exécutent depuis la station de travail locale**, pas depuis CI : ce qui part est votre copie de travail, y compris les modifications non validées.
 
-## Change guidance
+## Guide des changements
 
-- **When to consult this page:** changing the Docker setup, nginx config, VM
-  resources, or running a deployment.
-- **Invariants to preserve:** `.env` exclusion from transfers; `.dev-mode` marker
-  semantics; `deploy` vs `sync` split (build-time files require `deploy`);
-  `proxy_read_timeout` stays high for synchronous LLM rounds; keep the SPA fallback
-  and the `/assets/` cache rules in nginx.
-- **Validation:** `./deploy.sh status` and `./deploy.sh health` after any change;
-  local Docker smoke test `docker compose up --build` before touching the VM.
+- **Quand consulter cette page :** lors de modifications de la configuration Docker, de la config nginx, des ressources VM, ou lors d'un déploiement.
+- **Invariants à préserver :** exclusion du `.env` des transferts ; sémantique du marqueur `.dev-mode` ; distinction `deploy` vs `sync` (les fichiers de construction nécessitent `deploy`) ; `proxy_read_timeout` reste élevé pour les cycles LLM synchrones ; conserver le fallback SPA et les règles de cache `/assets/` dans nginx.
+- **Validation :** `./deploy.sh status` et `./deploy.sh health` après chaque changement ; test de fumée Docker local `docker compose up --build` avant de toucher à la VM.

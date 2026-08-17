@@ -1,7 +1,7 @@
 ---
-type: API Reference
-title: Refinement, Product Memory and Settings APIs
-description: The complete FastAPI surface of RefineMap — refinement session endpoints, product memory endpoints, settings endpoints, the strict Pydantic schemas, error mapping conventions, and the contracts directory.
+type: Référence API
+title: API de raffinement, de mémoire produit et de paramètres
+description: La surface FastAPI complète de RefineMap — les points de terminaison de session de raffinement, les points de terminaison de mémoire produit, les points de terminaison de paramètres, les schémas Pydantic stricts, les conventions de correspondance d'erreurs et le répertoire des contrats.
 tags: [api, fastapi, schemas, endpoints]
 openwiki:
   roles: [integration]
@@ -12,94 +12,101 @@ openwiki:
   validation_commands: [python -m pytest tests/ -q]
 ---
 
-# Refinement, Product Memory and Settings APIs
+# API de raffinement, de mémoire produit et de paramètres
 
-The backend exposes three routers, mounted in `src/main.py`:
-`/api/refinement` (refinement sessions), `/api` under `/api/products` and
-`/api/memory` (product memory), and `/api/settings` (LLM configuration). Every
-schema is a `StrictModel` (`extra="forbid"`) so unknown fields fail loudly at the
-boundary. The frontend mirrors these types in `frontend/src/types/api.ts` — keep
-both in sync when changing a schema.
+Le backend expose trois routeurs, montés dans `src/main.py` :
+`/api/refinement` (sessions de raffinement), `/api` sous `/api/products` et
+`/api/memory` (mémoire produit), et `/api/settings` (configuration LLM). Chaque
+schéma est un `StrictModel` (`extra="forbid"`) afin que les champs inconnus
+échouent de manière explicite à la frontière. Le frontend reflète ces types dans
+`frontend/src/types/api.ts` — gardez les deux en synchronisation lors d'une
+modification de schéma.
 
-## Refinement endpoints (`src/api/refinement.py`)
+## Points de terminaison de raffinement (`src/api/refinement.py`)
 
-| Method & path | Purpose | Request -> Response |
+| Méthode et chemin | Objet | Requête -> Réponse |
 |---|---|---|
-| `POST /api/refinement/sessions` | Create a session and generate round 1 | `CreateSessionRequest` (`objective`, `mode`, `extraContext`, `productId`, `productName`, `maxRounds`, `maxQuestionsPerRound`) -> `StartSessionResponse` (`session`, `questionRound`, `sessionSummary`, `productMemory`, `degraded`) |
-| `GET /api/refinement/sessions` | Paginated history list | query: `q`, `status`, `limit` (1..100, default 20), `offset` -> `SessionListResponse` |
-| `GET /api/refinement/sessions/{session_id}` | Full session detail | -> `SessionDetailResponse` (`session`, `subject`, `currentQuestionRound`, `questionRounds`, `answers` history, `sessionSummary`, `productMemory`, `deliverable`) |
-| `PATCH /api/refinement/sessions/{session_id}` | Rename | `RenameSessionRequest.title` -> `SessionListItem` |
-| `DELETE /api/refinement/sessions/{session_id}` | Delete (cascade) | -> 204 |
-| `POST /api/refinement/sessions/{session_id}/mode` | Change grid, reset rounds, replay round 0 | `SetModeRequest.mode` -> `SessionDetailResponse` |
-| `POST /api/refinement/sessions/{session_id}/answers` | Submit the open round's answers | `SubmitAnswersRequest.answers[]` (`questionId`, `answer`) -> `SubmitAnswersResponse` (`decision`, `questionRound` or `deliverable`, `sessionSummary`, `degraded`) |
-| `GET /api/refinement/sessions/{session_id}/export` | Markdown deliverable download | -> `text/markdown` with `Content-Disposition: attachment; filename="refinement-{session_id}.md"` |
+| `POST /api/refinement/sessions` | Créer une session et générer le tour 1 | `CreateSessionRequest` (`objective`, `mode`, `extraContext`, `productId`, `productName`, `maxRounds`, `maxQuestionsPerRound`) -> `StartSessionResponse` (`session`, `questionRound`, `sessionSummary`, `productMemory`, `degraded`) |
+| `GET /api/refinement/sessions` | Liste paginée de l'historique | query : `q`, `status`, `limit` (1..100, défaut 20), `offset` -> `SessionListResponse` |
+| `GET /api/refinement/sessions/{session_id}` | Détail complet de la session | -> `SessionDetailResponse` (`session`, `subject`, `currentQuestionRound`, `questionRounds`, historique `answers`, `sessionSummary`, `productMemory`, `deliverable`) |
+| `PATCH /api/refinement/sessions/{session_id}` | Renommer | `RenameSessionRequest.title` -> `SessionListItem` |
+| `DELETE /api/refinement/sessions/{session_id}` | Supprimer (en cascade) | -> 204 |
+| `POST /api/refinement/sessions/{session_id}/mode` | Changer la grille, réinitialiser les tours, rejouer le tour 0 | `SetModeRequest.mode` -> `SessionDetailResponse` |
+| `POST /api/refinement/sessions/{session_id}/answers` | Soumettre les réponses du tour ouvert | `SubmitAnswersRequest.answers[]` (`questionId`, `answer`) -> `SubmitAnswersResponse` (`decision`, `questionRound` ou `deliverable`, `sessionSummary`, `degraded`) |
+| `GET /api/refinement/sessions/{session_id}/export` | Téléchargement du livrable Markdown | -> `text/markdown` avec `Content-Disposition: attachment; filename="refinement-{session_id}.md"` |
 
-Error convention: `KeyError` -> `404` ("Session not found"), `ValueError` -> `400`
-("Provide an objective prompt to start a session.", "No open question round for this
-session", "No deliverable available yet", "Provide a title.", ...). Unknown and
-not-owned resources collapse into the same 404 to avoid existence leaks.
+Convention d'erreur : `KeyError` -> `404` (« Session introuvable »), `ValueError`
+-> `400` (« Fournissez un prompt d'objectif pour démarrer une session. », « Aucun
+tour de questions ouvert pour cette session », « Aucun livrable disponible pour le
+moment », « Fournissez un titre. », ...). Les ressources inconnues et celles qui
+n'appartiennent pas à l'utilisateur se confondent dans la même 404 afin d'éviter
+les fuites d'existence.
 
-## Product memory endpoints (`src/api/product_memory.py`)
+## Points de terminaison de mémoire produit (`src/api/product_memory.py`)
 
-| Method & path | Purpose |
+| Méthode et chemin | Objet |
 |---|---|
-| `GET /api/products` | List the user's products with active fact counts |
-| `POST /api/products` | Create a product (`CreateProductRequest.name`, min 1 / max 255) |
-| `DELETE /api/products/{product_id}` | Delete a product (facts cascade; sessions keep a dangling `product_id` that reads as "no memory") |
-| `GET /api/products/{product_id}/memory` | List the product's active facts |
-| `POST /api/products/{product_id}/memory` | Add a manual fact (`CreateMemoryFactRequest.category`, `statement`) — confirmed immediately |
-| `PATCH /api/memory/{fact_id}` | Update statement and/or `confirmed` flag (`UpdateMemoryFactRequest`) |
-| `DELETE /api/memory/{fact_id}` | Archive a fact (never hard-delete) |
+| `GET /api/products` | Liste les produits de l'utilisateur avec les compteurs de faits actifs |
+| `POST /api/products` | Crée un produit (`CreateProductRequest.name`, min 1 / max 255) |
+| `DELETE /api/products/{product_id}` | Supprime un produit (les faits sont supprimés en cascade ; les sessions conservent un `product_id` orphelin qui se lit comme « aucune mémoire ») |
+| `GET /api/products/{product_id}/memory` | Liste les faits actifs du produit |
+| `POST /api/products/{product_id}/memory` | Ajoute un fait manuel (`CreateMemoryFactRequest.category`, `statement`) — confirmé immédiatement |
+| `PATCH /api/memory/{fact_id}` | Met à jour la déclaration et/ou le drapeau `confirmed` (`UpdateMemoryFactRequest`) |
+| `DELETE /api/memory/{fact_id}` | Archive un fait (jamais de suppression définitive) |
 
-## Settings endpoints (`src/api/settings.py`)
+## Points de terminaison de paramètres (`src/api/settings.py`)
 
-| Method & path | Purpose |
+| Méthode et chemin | Objet |
 |---|---|
-| `GET /api/settings` | Current LLM settings: provider, endpoint, deployment, model, `keyConfigured`, masked `keyHint`, and `source` (database vs environment) |
-| `POST /api/settings` | Save provider/endpoint/deployment/model; API key saved only if non-empty and encrypted at rest |
-| `POST /api/settings/test/llm` | Validate the config for the chosen provider (`ConnectionTestRequest`, optional overrides). **Deliberately non-live**: it checks field completeness per provider, it does not call the network |
+| `GET /api/settings` | Paramètres LLM actuels : provider, endpoint, deployment, model, `keyConfigured`, `keyHint` masqué et `source` (base de données ou environnement) |
+| `POST /api/settings` | Enregistre provider/endpoint/deployment/model ; la clé API n'est enregistrée que si elle n'est pas vide et est chiffrée au repos |
+| `POST /api/settings/test/llm` | Valide la configuration pour le provider choisi (`ConnectionTestRequest`, surcharges optionnelles). **Délibérément sans appel réseau** : il vérifie la complétude des champs selon le provider, il n'appelle pas le réseau |
 
-See [llm-configuration.md](../operations/llm-configuration.md) for the full
-behavior, including provider-specific required fields and the mask/encryption rules.
+Voir [llm-configuration.md](../operations/llm-configuration.md) pour le
+comportement complet, y compris les champs obligatoires spécifiques au provider et
+les règles de masquage/chiffrement.
 
-## Schema highlights (`src/api/schemas_refinement.py`)
+## Points clés des schémas (`src/api/schemas_refinement.py`)
 
-- **Subject/round/summary** — `SubjectModel`, `QuestionItem` (with `suggestions`
-  chips), `QuestionRoundModel`, `SessionSummaryModel`.
-- **Deliverable** — `RefinementDeliverable` (`summary`, `brief[]`, `plan[]`,
-  `codeDraft`, `openQuestions[]`, `decisionReport`) with the `DecisionReport` v1->v2
-  migration (see [decision-report.md](../domain/decision-report.md)).
-- **LLM structured outputs** — `GenerateQuestionsOutput`, `SessionSummaryOutput`,
-  `RefinementDeliverableOutput`, `DetectModeOutput`, `ProductMemoryOp(s)Output`;
-  `ProductMemoryOp.action` is a plain `str` on purpose so an unknown action is
-  skipped by the repository instead of failing the whole diff.
-- **`degraded` flag** — present on `StartSessionResponse` and
-  `SubmitAnswersResponse`; true when the LLM failed and the offline mock produced
-  the content, so the UI can show a fallback banner.
+- **Sujet/tour/résumé** — `SubjectModel`, `QuestionItem` (avec des pastilles
+  `suggestions`), `QuestionRoundModel`, `SessionSummaryModel`.
+- **Livrable** — `RefinementDeliverable` (`summary`, `brief[]`, `plan[]`,
+  `codeDraft`, `openQuestions[]`, `decisionReport`) avec la migration
+  `DecisionReport` v1->v2 (voir [decision-report.md](../domain/decision-report.md)).
+- **Sorties structurées du LLM** — `GenerateQuestionsOutput`,
+  `SessionSummaryOutput`, `RefinementDeliverableOutput`, `DetectModeOutput`,
+  `ProductMemoryOp(s)Output` ; `ProductMemoryOp.action` est volontairement un
+  `str` simple afin qu'une action inconnue soit ignorée par le référentiel au lieu
+  de faire échouer l'ensemble du diff.
+- **Drapeau `degraded`** — présent sur `StartSessionResponse` et
+  `SubmitAnswersResponse` ; il est vrai quand le LLM a échoué et que le mock hors
+  ligne a produit le contenu, afin que l'interface puisse afficher une bannière de
+  secours.
 
-## Contracts directory (`contracts/`)
+## Répertoire des contrats (`contracts/`)
 
-The JSON Schemas for the LLM outputs (`generate-questions.schema.json`,
-`final-refinement.schema.json`, `session-summary.schema.json`) document the shapes
-the prompts must produce. Note: `contracts/refinement-api.md` describes an **older
-work-item-centric target contract** (Azure DevOps work items, HTMX pages) — it is a
-historical artifact that predates the current objective-based API and does not match
-the implemented routes.
+Les schémas JSON pour les sorties du LLM (`generate-questions.schema.json`,
+`final-refinement.schema.json`, `session-summary.schema.json`) documentent les
+formes que les prompts doivent produire. Remarque : `contracts/refinement-api.md`
+décrit un **ancien contrat cible centré sur les éléments de travail** (work items
+Azure DevOps, pages HTMX) — c'est un artefact historique antérieur à l'API actuelle
+basée sur les objectifs et qui ne correspond pas aux routes implémentées.
 
-## Change guidance
+## Guide des modifications
 
-- **When to consult this page:** adding/renaming an endpoint, changing a schema, or
-  changing error semantics.
-- **Invariants to preserve:** `StrictModel` with `extra="forbid"`; 404/400 mapping;
-  the `degraded` flag; masked (never raw) secrets in responses; the
-  session-id = thread-id convention.
-- **Cross-package surface:** every backend schema change must be mirrored in
-  `frontend/src/types/api.ts`, and consumer changes follow in
-  `frontend/src/api/refinement.ts` / `settings.ts`.
-- **Focused tests:** the schema behavior that is tested today is the
-  `DecisionReport` migration and normalization (`tests/test_artifact_renderer.py`);
-  there is no API-client test suite yet — endpoint smoke tests would require a
-  test client plus a temporary SQLite DB.
-- **Validation:** `python -m pytest tests/ -q`; for a manual smoke run start the
-  server and exercise `POST /api/refinement/sessions` with
-  `{"objective": "Test subject"}` (mock provider by default).
+- **Quand consulter cette page :** ajout/renommage d'un point de terminaison,
+  modification d'un schéma ou modification de la sémantique des erreurs.
+- **Invariants à préserver :** `StrictModel` avec `extra="forbid"` ; le mapping
+  404/400 ; le drapeau `degraded` ; les secrets masqués (jamais bruts) dans les
+  réponses ; la convention session-id = thread-id.
+- **Surface inter-paquets :** toute modification de schéma backend doit être
+  répercutée dans `frontend/src/types/api.ts`, et les modifications des
+  consommateurs suivent dans `frontend/src/api/refinement.ts` / `settings.ts`.
+- **Tests ciblés :** le comportement de schéma testé aujourd'hui est la migration
+  et la normalisation de `DecisionReport` (`tests/test_artifact_renderer.py`) ;
+  il n'existe pas encore de suite de tests pour le client API — des tests de fumée
+  des points de terminaison nécessiteraient un client de test ainsi qu'une base
+  SQLite temporaire.
+- **Validation :** `python -m pytest tests/ -q` ; pour un test de fumée manuel,
+  démarrez le serveur et exécutez `POST /api/refinement/sessions` avec
+  `{"objective": "Test subject"}` (provider simulé par défaut).

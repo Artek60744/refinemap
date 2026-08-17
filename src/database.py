@@ -48,6 +48,11 @@ def _add_missing_columns() -> None:
     wanted = {
         ("questions", "suggestions"): "JSON",
         ("refinement_sessions", "product_id"): "VARCHAR(64)",
+        ("refinement_sessions", "subject_id"): "VARCHAR(128)",
+        ("refinement_sessions", "subject_title"): "VARCHAR(512)",
+        ("refinement_sessions", "mode"): "VARCHAR(32) DEFAULT 'auto'",
+        ("refinement_sessions", "grid"): "VARCHAR(32) DEFAULT 'po'",
+        ("refinement_sessions", "detected_grid"): "VARCHAR(32)",
     }
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -59,6 +64,39 @@ def _add_missing_columns() -> None:
         with engine.begin() as connection:
             connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
         logger.info("Added missing column %s.%s", table, column)
+
+    if "refinement_sessions" in tables:
+        columns = {item["name"] for item in inspector.get_columns("refinement_sessions")}
+        if {"subject_id", "work_item_id"} <= columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "UPDATE refinement_sessions SET subject_id = work_item_id "
+                        "WHERE subject_id IS NULL"
+                    )
+                )
+            logger.info("Backfilled refinement_sessions.subject_id from work_item_id")
+        if {"subject_title", "work_item_title"} <= columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "UPDATE refinement_sessions SET subject_title = work_item_title "
+                        "WHERE subject_title IS NULL"
+                    )
+                )
+            logger.info("Backfilled refinement_sessions.subject_title from work_item_title")
+        if "subject_id" in columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE refinement_sessions ALTER COLUMN subject_id SET NOT NULL")
+                )
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_refinement_sessions_subject_id "
+                        "ON refinement_sessions (subject_id)"
+                    )
+                )
 
 
 def init_db() -> None:
