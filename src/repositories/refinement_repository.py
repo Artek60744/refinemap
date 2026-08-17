@@ -41,6 +41,7 @@ class RefinementRepository:
         grid: str,
         detected_grid: str | None,
         extra_context: str,
+        product_id: str | None = None,
         max_rounds: int,
         max_questions_per_round: int,
         prompt_version: str,
@@ -49,6 +50,7 @@ class RefinementRepository:
     ) -> RefinementSession:
         session = RefinementSession(
             user_id=user.id,
+            product_id=product_id,
             subject_id=str(subject["id"]),
             subject_title=subject.get("title"),
             mode=mode,

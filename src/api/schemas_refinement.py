@@ -119,6 +119,46 @@ class RefinementDeliverable(StrictModel):
     decisionReport: DecisionReport | None = None
 
 
+# --- product memory --------------------------------------------------------
+
+
+class ProductModel(StrictModel):
+    id: str
+    name: str
+    factCount: int = 0
+    createdAt: datetime | None = None
+
+
+class ProductMemoryItem(StrictModel):
+    """One durable fact about the product, carried across sessions."""
+
+    id: str
+    category: str
+    statement: str
+    confirmed: bool = False
+    sourceSessionId: str | None = None
+    updatedAt: datetime | None = None
+
+
+class ProductMemoryListResponse(StrictModel):
+    product: ProductModel
+    facts: list[ProductMemoryItem] = Field(default_factory=list)
+
+
+class CreateProductRequest(StrictModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
+class CreateMemoryFactRequest(StrictModel):
+    category: str = "produit"
+    statement: str = Field(min_length=1)
+
+
+class UpdateMemoryFactRequest(StrictModel):
+    statement: str | None = None
+    confirmed: bool | None = None
+
+
 # --- session ---------------------------------------------------------------
 
 
@@ -131,6 +171,8 @@ class SessionModel(StrictModel):
     mode: str = "auto"
     grid: str = "po"
     detectedGrid: str | None = None
+    productId: str | None = None
+    productName: str = ""
     createdAt: datetime | None = None
 
 
@@ -144,6 +186,10 @@ class CreateSessionRequest(StrictModel):
     objective: str = ""
     mode: str = "auto"
     extraContext: str = ""
+    # Scope of the product memory. productId wins; productName creates on the fly.
+    # Both empty means a session without memory.
+    productId: str | None = None
+    productName: str = ""
     maxRounds: int | None = None
     maxQuestionsPerRound: int | None = None
 
@@ -165,6 +211,8 @@ class StartSessionResponse(StrictModel):
     session: SessionModel
     questionRound: QuestionRoundModel | None = None
     sessionSummary: SessionSummaryModel
+    # Facts injected from past sessions, so round 0 can show what is assumed known.
+    productMemory: list[ProductMemoryItem] = Field(default_factory=list)
     # True when the LLM failed and the offline engine produced this content.
     degraded: bool = False
 
@@ -183,6 +231,7 @@ class SessionDetailResponse(StrictModel):
     questionRounds: list[QuestionRoundModel] = Field(default_factory=list)
     answers: list[AnswerHistoryItem] = Field(default_factory=list)
     sessionSummary: SessionSummaryModel
+    productMemory: list[ProductMemoryItem] = Field(default_factory=list)
     deliverable: RefinementDeliverable | None = None
 
 
@@ -243,4 +292,25 @@ class RefinementDeliverableOutput(RefinementDeliverable):
 
 class DetectModeOutput(StrictModel):
     grid: str
+    reason: str = ""
+
+
+class ProductMemoryOp(StrictModel):
+    """One entry of the extraction diff. `id` targets an existing fact on update/remove."""
+
+    # Deliberately a plain str, not a Literal: an unknown action is skipped by the
+    # repository, whereas a Literal would fail the whole diff over one bad entry.
+    action: str = "add"
+    id: str | None = None
+    category: str = "produit"
+    statement: str = ""
+
+    @field_validator("action", "category", mode="before")
+    @classmethod
+    def _normalize_op(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
+
+
+class ProductMemoryOpsOutput(StrictModel):
+    ops: list[ProductMemoryOp] = Field(default_factory=list)
     reason: str = ""

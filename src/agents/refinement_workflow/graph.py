@@ -6,6 +6,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from src.agents.refinement_workflow.nodes import (
+    build_extract_product_memory_node,
     build_generate_final_refinement_node,
     build_generate_questions_node,
     build_summarize_context_node,
@@ -33,12 +34,19 @@ def route_after_summary(state: RefinementState) -> Literal["generate_questions",
     return "generate_questions"
 
 
+def route_after_final(state: RefinementState) -> Literal["extract_product_memory", "__end__"]:
+    # No product attached means nothing to remember: skip the extra LLM call instead
+    # of producing a diff that would be discarded downstream.
+    return "extract_product_memory" if state.get("product_id") else END
+
+
 def create_refinement_graph(llm, checkpointer: Optional[MemorySaver] = None):
     builder = StateGraph(RefinementState)
 
     builder.add_node("generate_questions", build_generate_questions_node(llm))
     builder.add_node("summarize_context", build_summarize_context_node(llm))
     builder.add_node("generate_final_refinement", build_generate_final_refinement_node(llm))
+    builder.add_node("extract_product_memory", build_extract_product_memory_node(llm))
 
     builder.add_conditional_edges(
         START,
@@ -58,8 +66,17 @@ def create_refinement_graph(llm, checkpointer: Optional[MemorySaver] = None):
         },
     )
 
+    builder.add_conditional_edges(
+        "generate_final_refinement",
+        route_after_final,
+        {
+            "extract_product_memory": "extract_product_memory",
+            END: END,
+        },
+    )
+
     builder.add_edge("generate_questions", END)
-    builder.add_edge("generate_final_refinement", END)
+    builder.add_edge("extract_product_memory", END)
 
     if checkpointer is None:
         checkpointer = MemorySaver()

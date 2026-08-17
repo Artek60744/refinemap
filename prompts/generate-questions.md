@@ -1,7 +1,7 @@
 # Task — Generate the next question round
 
 Use the system instructions and the provided context (subject, active `grid`,
-`grid_axes`, extra context, previous facts/assumptions/unknowns/answers).
+`grid_axes`, extra context, product memory, previous facts/assumptions/unknowns/answers).
 
 `answers` contains joined pairs — each item has `question`, `answer`, `theme` and `round`,
 so you can read every answer against the question that produced it. `asked_questions` lists
@@ -11,7 +11,19 @@ Objectives:
 
 - reduce ambiguity on this subject quickly
 - avoid questions already answered or already implied by known facts
+- avoid questions already answered by `product_memory`
 - ask at most `max_questions_per_round` questions
+
+Product memory (applies to EVERY round):
+
+- `product_memory` lists durable facts established during previous sessions on this
+  product. They are acquired. A question whose answer is already in `product_memory`
+  is a failure, exactly like re-asking a question from `asked_questions`.
+- Build on them instead: if the memory says the backend is .NET, do not ask which
+  backend — ask what that constrains for THIS subject.
+- One exception: when an answer in `answers` contradicts a memorized fact, ask one
+  targeted confirmation question that quotes the memorized fact and forces a choice
+  between the two versions. Never re-ask it as an open question.
 
 Round behavior (`round` is 0-based: 0 = first round, 1 = second round, ...):
 

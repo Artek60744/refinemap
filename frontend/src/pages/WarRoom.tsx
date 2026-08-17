@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { archiveMemoryFact, updateMemoryFact } from "../api/memory";
 import { exportUrl, getSession, setSessionMode, submitAnswers } from "../api/refinement";
 import DecisionReportView from "../components/DecisionReportView";
 import { GRID_LABELS } from "../constants/grids";
 import { useI18n } from "../i18n";
-import type { QuestionItem, QuestionRoundModel, SessionDetailResponse } from "../types/api";
+import type {
+  ProductMemoryItem,
+  QuestionItem,
+  QuestionRoundModel,
+  SessionDetailResponse,
+} from "../types/api";
 
 const LOGO_URL =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuCW8Ydnt1pjaSuuOkoaNpK1bp7aL7xVEgZAfXu4_neIosXkFUY8fo12xP_7XfMCd5zqMPdCevOiuoIYykQoU54l85QQLB-BZJSCDd_g3XlCDrD7CpUKO31N87WHuGyh0IDgl8VMQpqPoASztCeXDwjnvcgt6Z0dE5ejZxtDqgqdkEkxTfwH5Ptb1QeXYEj6veWO7sCIaJSw3dhJCH8ErNWSug3IN5wx5RNL-za3Oo-Oc_JJ8__8SL3-";
@@ -139,6 +145,121 @@ function RoundDivider({ round }: { round: number }) {
 
 type Tab = "brief" | "plan" | "code";
 
+// Round 0 pre-flight: what the tool assumes it already knows about the product.
+// Correcting or removing a line writes straight to the memory — that feedback loop
+// is what keeps it trustworthy over time, so it never edits a local copy only.
+function MemoryBanner({
+  facts,
+  defaultOpen,
+  onChange,
+}: {
+  facts: ProductMemoryItem[];
+  defaultOpen: boolean;
+  onChange: (facts: ProductMemoryItem[]) => void;
+}) {
+  const { t, label } = useI18n();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function commit(fact: ProductMemoryItem) {
+    const statement = draft.trim();
+    if (!statement || statement === fact.statement) {
+      setEditingId(null);
+      return;
+    }
+    setBusyId(fact.id);
+    try {
+      const updated = await updateMemoryFact(fact.id, { statement });
+      onChange(facts.map((row) => (row.id === fact.id ? updated : row)));
+    } finally {
+      setBusyId(null);
+      setEditingId(null);
+    }
+  }
+
+  async function remove(fact: ProductMemoryItem) {
+    setBusyId(fact.id);
+    try {
+      await archiveMemoryFact(fact.id);
+      onChange(facts.filter((row) => row.id !== fact.id));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <details open={defaultOpen} className="border-b border-border-subtle bg-surface-container-lowest">
+      <summary className="cursor-pointer list-none px-4 py-3">
+        <span className="flex items-center gap-2">
+          <span className="material-symbols-outlined text-[16px] text-primary">database</span>
+          <span className="flex-1 font-label-md text-label-md uppercase tracking-wider text-on-surface-variant">
+            {t("memory.known_title")}
+          </span>
+          <span className="rounded-full bg-primary-container/15 px-2 py-0.5 text-[11px] font-bold text-primary">
+            {facts.length}
+          </span>
+        </span>
+      </summary>
+      <div className="px-4 pb-3">
+        <p className="mb-2 text-[11px] leading-snug text-outline">{t("memory.known_hint")}</p>
+        <ul className="flex list-none flex-col gap-1 p-0">
+          {facts.map((fact) => (
+            <li key={fact.id} className="group flex items-start gap-1 text-xs text-on-surface-variant">
+              {editingId === fact.id ? (
+                <input
+                  autoFocus
+                  value={draft}
+                  disabled={busyId === fact.id}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void commit(fact);
+                    }
+                    if (event.key === "Escape") setEditingId(null);
+                  }}
+                  onBlur={() => setEditingId(null)}
+                  className="w-full rounded border border-primary bg-surface px-1 py-0.5 text-xs text-on-surface outline-none"
+                />
+              ) : (
+                <>
+                  <span className="flex-1 leading-snug">
+                    <span className="mr-1 text-[10px] uppercase tracking-wider text-outline">
+                      {label("category", fact.category)}
+                    </span>
+                    {fact.statement}
+                  </span>
+                  <button
+                    type="button"
+                    title={t("memory.correct")}
+                    onClick={() => {
+                      setDraft(fact.statement);
+                      setEditingId(fact.id);
+                    }}
+                    className="shrink-0 border-0 bg-transparent p-0 text-on-surface-variant opacity-0 transition-opacity hover:text-primary group-hover:opacity-100"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    title={t("memory.remove")}
+                    disabled={busyId === fact.id}
+                    onClick={() => void remove(fact)}
+                    className="shrink-0 border-0 bg-transparent p-0 text-on-surface-variant opacity-0 transition-opacity hover:text-error group-hover:opacity-100"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">close</span>
+                  </button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </details>
+  );
+}
+
 export default function WarRoom() {
   const { sessionId = "" } = useParams();
   const { t, label } = useI18n();
@@ -162,6 +283,9 @@ export default function WarRoom() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const [tab, setTab] = useState<Tab>("brief");
+  // Local mirror of the injected memory so corrections show immediately; the writes
+  // themselves go to the API, not to this array.
+  const [memory, setMemory] = useState<ProductMemoryItem[]>([]);
   const chatRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -170,7 +294,9 @@ export default function WarRoom() {
     setLoadError(null);
     getSession(sessionId)
       .then((payload) => {
-        if (!cancelled) setDetail(payload);
+        if (cancelled) return;
+        setDetail(payload);
+        setMemory(payload.productMemory);
       })
       .catch((error: unknown) => {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : String(error));
@@ -442,6 +568,9 @@ export default function WarRoom() {
             </div>
             <p className="font-headline-md text-sm leading-tight text-on-surface">{subject.title}</p>
           </div>
+          {memory.length > 0 && (
+            <MemoryBanner facts={memory} defaultOpen={session.round <= 1} onChange={setMemory} />
+          )}
           <div className="p-4">
             <div className="tree-line relative flex flex-col gap-1">
               {groups.length === 0 && (

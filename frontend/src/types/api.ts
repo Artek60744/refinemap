@@ -72,6 +72,49 @@ export interface RefinementDeliverable {
   decisionReport: DecisionReport | null;
 }
 
+export type MemoryCategory =
+  | "produit"
+  | "stack"
+  | "equipe"
+  | "contrainte"
+  | "utilisateur"
+  | "decision";
+
+export interface ProductModel {
+  id: string;
+  name: string;
+  factCount: number;
+  createdAt: string | null;
+}
+
+export interface ProductMemoryItem {
+  id: string;
+  category: string;
+  statement: string;
+  confirmed: boolean;
+  sourceSessionId: string | null;
+  updatedAt: string | null;
+}
+
+export interface ProductMemoryListResponse {
+  product: ProductModel;
+  facts: ProductMemoryItem[];
+}
+
+export interface CreateProductRequest {
+  name: string;
+}
+
+export interface CreateMemoryFactRequest {
+  category: string;
+  statement: string;
+}
+
+export interface UpdateMemoryFactRequest {
+  statement?: string;
+  confirmed?: boolean;
+}
+
 export interface SessionModel {
   id: string;
   status: SessionStatus;
@@ -81,6 +124,8 @@ export interface SessionModel {
   mode: string;
   grid: string;
   detectedGrid: string | null;
+  productId: string | null;
+  productName: string;
   createdAt: string | null;
 }
 
@@ -125,6 +170,9 @@ export interface CreateSessionRequest {
   objective: string;
   mode?: string;
   extraContext?: string;
+  // Scope of the product memory: productId wins, productName creates on the fly.
+  productId?: string | null;
+  productName?: string;
   maxRounds?: number;
   maxQuestionsPerRound?: number;
 }
@@ -146,6 +194,7 @@ export interface StartSessionResponse {
   session: SessionModel;
   questionRound: QuestionRoundModel | null;
   sessionSummary: SessionSummaryModel;
+  productMemory: ProductMemoryItem[];
   degraded: boolean;
 }
 
@@ -162,6 +211,7 @@ export interface SessionDetailResponse {
   questionRounds: QuestionRoundModel[];
   answers: AnswerHistoryItem[];
   sessionSummary: SessionSummaryModel;
+  productMemory: ProductMemoryItem[];
   deliverable: RefinementDeliverable | null;
 }
 

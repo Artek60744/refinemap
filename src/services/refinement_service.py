@@ -25,8 +25,10 @@ from src.api.schemas_refinement import (
     SubmitAnswersResponse,
 )
 from src.config.settings import settings
+from src.repositories.product_memory_repository import ProductMemoryRepository
 from src.repositories.refinement_repository import RefinementRepository
 from src.services.artifact_renderer import render_deliverable_markdown
+from src.services.product_memory_service import to_memory_context, to_memory_item
 from src.services.prompt_loader import PromptLoader
 from src.services.question_grids import (
     detect_grid_by_keywords,
@@ -47,9 +49,11 @@ class RefinementService:
             raise ValueError("Provide an objective prompt to start a session.")
 
         repo = RefinementRepository(db)
+        memory_repo = ProductMemoryRepository(db)
         user = repo.ensure_local_user(settings.default_user_email, settings.default_user_name)
         llm, graph, runtime = self._build_runtime_components(db)
 
+        product = self._resolve_product(memory_repo, user.id, request)
         mode = normalize_mode(request.mode)
         subject = self._synthesize_subject(objective)
 
@@ -74,6 +78,7 @@ class RefinementService:
             grid=grid,
             detected_grid=detected_grid,
             extra_context=request.extraContext,
+            product_id=product.id if product else None,
             max_rounds=request.maxRounds or settings.refinement_max_rounds,
             max_questions_per_round=request.maxQuestionsPerRound or settings.refinement_max_questions_per_round,
             prompt_version=self.prompt_loader.version,
@@ -82,14 +87,19 @@ class RefinementService:
         )
         repo.add_subject_snapshot(session_id=session.id, normalized_payload=subject)
 
-        question_round = await self._run_initial_round(repo, graph, session.id, subject, grid)
+        memory_facts = memory_repo.list_active_facts(product.id) if product else []
+        question_round = await self._run_initial_round(
+            repo, graph, session.id, subject, grid, memory_facts=memory_facts
+        )
+        memory_repo.touch_uses([fact.id for fact in memory_facts])
 
         refreshed = repo.get_session(session.id)
         assert refreshed is not None
         return StartSessionResponse(
-            session=self._to_session_model(refreshed),
+            session=self._to_session_model(refreshed, product),
             questionRound=self._to_question_round_model(question_round),
             sessionSummary=self._to_summary_model(repo.latest_summary(refreshed)),
+            productMemory=[to_memory_item(fact) for fact in memory_facts],
             degraded=getattr(llm, "degraded", False),
         )
 
@@ -112,10 +122,16 @@ class RefinementService:
 
         repo.set_mode(session, mode=mode, grid=grid)
         repo.reset_rounds(session)
-        await self._run_initial_round(repo, graph, session.id, subject, grid)
+        # reset_rounds replays round 0, so the memory has to be injected again.
+        memory_facts = self._memory_facts(db, session)
+        await self._run_initial_round(
+            repo, graph, session.id, subject, grid, memory_facts=memory_facts
+        )
         return await self.get_session(db, session_id)
 
-    async def _run_initial_round(self, repo, graph, session_id: str, subject: dict[str, Any], grid: str):
+    async def _run_initial_round(
+        self, repo, graph, session_id: str, subject: dict[str, Any], grid: str, *, memory_facts=None
+    ):
         session = repo.get_session(session_id)
         assert session is not None
         initial_state = create_initial_state(
@@ -124,6 +140,8 @@ class RefinementService:
             mode=subject.get("mode", "auto"),
             grid=grid,
             extra_context=session.extra_context or "",
+            product_id=session.product_id or "",
+            product_memory=[to_memory_context(fact) for fact in memory_facts or []],
             min_rounds=settings.refinement_min_rounds,
             max_rounds=session.max_rounds,
             max_questions_per_round=session.max_questions_per_round,
@@ -211,13 +229,15 @@ class RefinementService:
             if question.id in answer_by_question_id
         ]
 
+        memory_facts = self._memory_facts(db, session)
         return SessionDetailResponse(
-            session=self._to_session_model(session),
+            session=self._to_session_model(session, self._product_of(db, session)),
             subject=self._to_subject_model(session),
             currentQuestionRound=self._to_question_round_model(current_round) if current_round else None,
             questionRounds=[self._to_question_round_model(round_model) for round_model in sorted_rounds],
             answers=answer_history,
             sessionSummary=self._to_summary_model(summary),
+            productMemory=[to_memory_item(fact) for fact in memory_facts],
             deliverable=RefinementDeliverable.model_validate(final_artifact.payload) if final_artifact else None,
         )
 
@@ -232,7 +252,10 @@ class RefinementService:
         assert reloaded is not None
 
         llm, graph, _runtime = self._build_runtime_components(db)
-        state = self._build_state_from_session(reloaded, workflow_action="answers_submitted")
+        memory_facts = self._memory_facts(db, reloaded)
+        state = self._build_state_from_session(
+            reloaded, workflow_action="answers_submitted", memory_facts=memory_facts
+        )
         result = await graph.ainvoke(state, config={"configurable": {"thread_id": session_id}})
 
         current = repo.get_session(session_id)
@@ -245,6 +268,10 @@ class RefinementService:
 
         if result.get("deliverable"):
             repo.add_final_artifact(current, result["deliverable"])
+            if current.product_id and result.get("memory_ops"):
+                ProductMemoryRepository(db).apply_ops(
+                    current.product_id, result["memory_ops"], source_session_id=session_id
+                )
             current = repo.get_session(session_id)
             assert current is not None
             final_artifact = repo.latest_final_artifact(current)
@@ -260,7 +287,7 @@ class RefinementService:
         decision = DecisionModel.model_validate(result.get("decision", {}))
 
         return SubmitAnswersResponse(
-            session=self._to_session_model(current),
+            session=self._to_session_model(current, self._product_of(db, current)),
             decision=decision,
             questionRound=question_round_model,
             sessionSummary=self._to_summary_model(summary),
@@ -305,7 +332,31 @@ class RefinementService:
         payload["grid"] = session.grid
         return payload
 
-    def _build_state_from_session(self, session, workflow_action: str) -> dict[str, Any]:
+    # -- product memory --
+    def _resolve_product(self, memory_repo: ProductMemoryRepository, user_id: str, request):
+        """productId wins over productName; neither means a session without memory."""
+        if request.productId:
+            product = memory_repo.get_product(request.productId, user_id)
+            if product is None:
+                raise KeyError(f"Product not found: {request.productId}")
+            return product
+        if request.productName.strip():
+            return memory_repo.ensure_product(user_id, request.productName)
+        return None
+
+    def _product_of(self, db: Session, session):
+        if not session.product_id:
+            return None
+        return ProductMemoryRepository(db).get_product(session.product_id, session.user_id)
+
+    def _memory_facts(self, db: Session, session) -> list[Any]:
+        if not session.product_id:
+            return []
+        return ProductMemoryRepository(db).list_active_facts(session.product_id)
+
+    def _build_state_from_session(
+        self, session, workflow_action: str, *, memory_facts=None
+    ) -> dict[str, Any]:
         latest_summary = None
         if session.summaries:
             latest_summary = max(session.summaries, key=lambda item: item.round_number)
@@ -347,6 +398,8 @@ class RefinementService:
             "mode": session.mode,
             "grid": session.grid,
             "extra_context": session.extra_context or "",
+            "product_id": session.product_id or "",
+            "product_memory": [to_memory_context(fact) for fact in memory_facts or []],
             "round": session.round,
             "min_rounds": settings.refinement_min_rounds,
             "max_rounds": session.max_rounds,
@@ -362,7 +415,7 @@ class RefinementService:
             "enough_context": latest_summary.enough_context if latest_summary else False,
         }
 
-    def _to_session_model(self, session) -> SessionModel:
+    def _to_session_model(self, session, product=None) -> SessionModel:
         return SessionModel(
             id=session.id,
             status=session.status,
@@ -372,6 +425,8 @@ class RefinementService:
             mode=session.mode,
             grid=session.grid,
             detectedGrid=session.detected_grid,
+            productId=session.product_id,
+            productName=product.name if product else "",
             createdAt=session.created_at,
         )
 

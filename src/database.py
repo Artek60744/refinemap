@@ -45,7 +45,10 @@ def _add_missing_columns() -> None:
     `create_all` only creates missing tables, so new columns on existing tables
     have to be added by hand.
     """
-    wanted = {("questions", "suggestions"): "JSON"}
+    wanted = {
+        ("questions", "suggestions"): "JSON",
+        ("refinement_sessions", "product_id"): "VARCHAR(64)",
+    }
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
     for (table, column), ddl_type in wanted.items():

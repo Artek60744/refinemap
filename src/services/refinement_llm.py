@@ -15,11 +15,14 @@ from src.api.schemas_refinement import (
     DetectModeOutput,
     GenerateQuestionsOutput,
     PlanStep,
+    ProductMemoryOp,
+    ProductMemoryOpsOutput,
     QuestionItem,
     RefinementDeliverableOutput,
     SessionSummaryOutput,
 )
 from src.config.settings import settings
+from src.services.product_memory_rules import classify_memory_category, is_durable_statement
 from src.services.prompt_loader import PromptLoader
 from src.services.question_grids import (
     detect_grid_by_keywords,
@@ -41,6 +44,9 @@ class RefinementLLM(Protocol):
         ...
 
     async def generate_final_refinement(self, context: dict[str, Any]) -> RefinementDeliverableOutput:
+        ...
+
+    async def extract_product_memory(self, context: dict[str, Any]) -> ProductMemoryOpsOutput:
         ...
 
 
@@ -221,6 +227,38 @@ class MockRefinementLLM:
                 confidence=confidence,
                 grid=grid,
             ),
+        )
+
+    async def extract_product_memory(self, context: dict[str, Any]) -> ProductMemoryOpsOutput:
+        """Promote the session's durable facts into the product memory.
+
+        Offline rules only: a fact enters the memory if it is a short statement with
+        no temporal anchor and no equivalent already memorized. The mock never emits
+        `update` or `remove` — rewriting a memorized fact needs a judgment it cannot
+        make, and archiving on a heuristic would silently erase real knowledge.
+        """
+        known = {
+            (item.get("statement") or "").strip().lower()
+            for item in context.get("product_memory", [])
+        }
+        ops: list[ProductMemoryOp] = []
+        for fact in self._dedupe(list(context.get("facts", []))):
+            if self._looks_unknown(fact) or not is_durable_statement(fact):
+                continue
+            if fact.strip().lower() in known:
+                continue
+            known.add(fact.strip().lower())
+            ops.append(
+                ProductMemoryOp(
+                    action="add",
+                    category=classify_memory_category(fact),
+                    statement=fact.strip(),
+                )
+            )
+
+        return ProductMemoryOpsOutput(
+            ops=ops,
+            reason=f"{len(ops)} fait(s) durable(s) retenu(s) hors ligne.",
         )
 
     def _build_decision_report(
@@ -520,6 +558,15 @@ class OpenAICompatibleLLM:
             logger.warning("generate_final_refinement via %s failed (%s); using offline fallback.", self.model_name, exc)
             self.degraded = True
             return await self._fallback.generate_final_refinement(context)
+
+    async def extract_product_memory(self, context: dict[str, Any]) -> ProductMemoryOpsOutput:
+        try:
+            data = await self._chat_json(self._system(), self.prompt_loader.load("extract-product-memory"), context)
+            return ProductMemoryOpsOutput.model_validate(data)
+        except Exception as exc:
+            logger.warning("extract_product_memory via %s failed (%s); using offline fallback.", self.model_name, exc)
+            self.degraded = True
+            return await self._fallback.extract_product_memory(context)
 
 
 def build_refinement_llm(

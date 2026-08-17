@@ -26,6 +26,8 @@ async def create_session(payload: CreateSessionRequest, db: Session = Depends(ge
     service = get_refinement_service()
     try:
         return await service.start_session(db, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

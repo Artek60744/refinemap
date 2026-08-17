@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import TopNavBar from "../components/TopNavBar";
+import { listProducts } from "../api/memory";
 import { useI18n } from "../i18n";
+import type { ProductModel } from "../types/api";
+
+// Sentinel value of the product <select>, distinct from "" (= no product at all).
+const NEW_PRODUCT = "__new__";
 
 const AVATAR_URL =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuBfikYYcBcADrKCg8nLbkcK32aq9GCb6KJz4jkTN8UzcM5g6GfQ1a99g4azrl9I6DBZ87MzXJMkV16rZoJ2la1uqkl0oZVpxSEEFMkO6IS3SEUjobrG_OUMEaVDCtwFpOcwGHHdRseM4VUsy1DWHGiW_b1CHAcgTtSuTOvh4RCqh_2aFhrUiLIeH7qdt-17yCDwdWGa-Ul0afnHZjtQ2TGqL0e5W9JItS091fqt7XP8Gp34rHXB-ykL";
@@ -11,11 +16,28 @@ export default function RefinementHome() {
   const navigate = useNavigate();
 
   const [query, setQuery] = useState("");
+  const [products, setProducts] = useState<ProductModel[]>([]);
+  const [productId, setProductId] = useState("");
+  const [newProductName, setNewProductName] = useState("");
+
+  useEffect(() => {
+    // A failure here must not block starting a session: no product simply means
+    // a session without memory.
+    listProducts()
+      .then(setProducts)
+      .catch(() => setProducts([]));
+  }, []);
 
   function handleStart() {
     const objective = query.trim();
     if (!objective) return;
-    navigate("/refinement/choose", { state: { objective } });
+    navigate("/refinement/choose", {
+      state: {
+        objective,
+        productId: productId === NEW_PRODUCT ? null : productId || null,
+        productName: productId === NEW_PRODUCT ? newProductName.trim() : "",
+      },
+    });
   }
 
   return (
@@ -55,6 +77,35 @@ export default function RefinementHome() {
               </button>
               <div className="h-4 w-px bg-border-subtle mx-1"></div>
               <span className="font-label-sm text-label-sm text-outline uppercase tracking-wider">Drafting</span>
+
+              {/* Product scope: decides which memory feeds this session. */}
+              <div className="ml-auto flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px] text-outline">database</span>
+                <select
+                  aria-label={t("memory.product")}
+                  className="rounded border border-border-subtle bg-surface-container-lowest px-2 py-1 font-label-sm text-label-sm text-on-surface-variant outline-none cursor-pointer"
+                  value={productId}
+                  onChange={(e) => setProductId(e.target.value)}
+                >
+                  <option value="">{t("memory.product_placeholder")}</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name} ({product.factCount})
+                    </option>
+                  ))}
+                  <option value={NEW_PRODUCT}>{t("memory.new_product")}</option>
+                </select>
+                {productId === NEW_PRODUCT && (
+                  <input
+                    autoFocus
+                    aria-label={t("memory.new_product")}
+                    className="w-40 rounded border border-border-subtle bg-surface-container-lowest px-2 py-1 font-label-sm text-label-sm text-on-surface outline-none"
+                    value={newProductName}
+                    onChange={(e) => setNewProductName(e.target.value)}
+                    placeholder={t("memory.new_product_placeholder")}
+                  />
+                )}
+              </div>
             </div>
 
             <textarea
