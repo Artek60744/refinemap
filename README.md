@@ -147,6 +147,41 @@ En ligne sur <http://203.0.113.10/>.
 Voir `docs/deployment.md` pour le guide complet, y compris le contrôle des coûts et
 les limites de sécurité actuelles.
 
+## Documentation temps réel (OpenWiki)
+
+Le repo embarque [OpenWiki](https://github.com/langchain-ai/openwiki), un CLI qui
+génère et maintient un wiki Markdown de la codebase dans `openwiki/`, visualisable
+sous forme de **graphe de connaissances** interactif. La doc se met à jour
+automatiquement à chaque changement de code.
+
+```bash
+npm install            # une fois : installe le CLI (devDependency)
+npm run docs:init      # première génération interactive (provider / clé / modèle)
+npm run docs:update    # régénérer la doc (one-shot, non interactif)
+npm run docs:watch     # temps réel : surveille src/, frontend/src/, contracts/
+                       # et met à jour la doc à chaque changement (debounce 8 s)
+npm run docs:visualize # graphe de connaissances interactif (127.0.0.1:4321)
+```
+
+- Le wiki vit dans `openwiki/` et est commité avec le code.
+- OpenWiki maintient `AGENTS.md` et `CLAUDE.md` (bloc `OPENWIKI:START/END`) pour
+  pointer les agents vers le wiki.
+- Le périmètre lu par la doc est contrôlé par `.openwikiignore`.
+
+### Configurer DeepSeek
+
+Config locale persistée dans `~/.openwiki/.env` :
+
+```
+OPENWIKI_PROVIDER=openai-compatible
+OPENAI_COMPATIBLE_BASE_URL=https://api.deepseek.com/v1
+OPENAI_COMPATIBLE_API_KEY=sk-...
+OPENWIKI_MODEL_ID=deepseek-v4-flash
+```
+
+Ou passer ces variables en environnement à chaque `npm run docs:*` — pratique pour
+reprendre `DEEPSEEK_API_KEY` et `DEEPSEEK_MODEL` depuis le `.env` du repo.
+
 ## Critères de succès MVP
 
 - une équipe crée un board et une idée racine en moins de 2 minutes

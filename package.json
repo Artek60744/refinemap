@@ -1,0 +1,14 @@
+{
+  "name": "refinemap-docs",
+  "private": true,
+  "description": "OpenWiki : documentation temps réel + graphe de connaissance pour RefineMap",
+  "scripts": {
+    "docs:init": "openwiki --init",
+    "docs:update": "openwiki code --update --print",
+    "docs:watch": "node scripts/openwiki-watch.mjs",
+    "docs:visualize": "openwiki visualize openwiki"
+  },
+  "devDependencies": {
+    "openwiki": "^0.3.2"
+  }
+}
