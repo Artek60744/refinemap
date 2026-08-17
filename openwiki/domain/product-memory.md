@@ -6,15 +6,16 @@ tags: [domain, product-memory, persistence]
 openwiki:
   roles: [domain]
   change_kinds: [runtime]
-  source_paths: [src/models/product_memory.py, src/repositories/product_memory_repository.py, src/services/product_memory_service.py, src/services/product_memory_rules.py, prompts/extract-product-memory.md]
+  source_paths: [src/models/product_memory.py, src/repositories/product_memory_repository.py, src/services/product_memory_service.py, src/services/product_memory_rules.py, prompts/extract-product-memory.md, docs/product-memory.md]
   symbols: [Product, ProductMemoryFact, MEMORY_CATEGORIES, MEMORY_FACT_LIMIT, normalize_category, is_durable_statement, classify_memory_category, apply_ops, to_memory_context]
-  invariants: ["A fact enters the memory only if it would still be true in a different session about the same product. Facts are archived, never hard-deleted. At most MEMORY_FACT_LIMIT (40) active facts are injected into a prompt, grouped by category after the cap is applied. An op targeting a fact of another product is ignored rather than failing the session."]
-  validation_commands: [python -m pytest tests/ -q]
+  test_paths: [tests/test_product_memory.py, tests/test_product_memory_api.py, tests/test_product_memory_flow.py]
+  invariants: ["Un fait n’entre en mémoire que s’il serait encore vrai dans une session différente portant sur le même produit. Les faits sont archivés, jamais supprimés définitivement. Au plus MEMORY_FACT_LIMIT (40) faits actifs sont injectés dans un prompt, regroupés par catégorie après application du plafond. Une opération ciblant un fait d’un autre produit est ignorée plutôt que de faire échouer la session."]
+  validation_commands: [python -m pytest tests/test_product_memory.py tests/test_product_memory_api.py tests/test_product_memory_flow.py -q]
 ---
 
 # Mémoire produit — faits durables entre les sessions
 
-La mémoire produit est le deuxième fossé défensif de RefineMap (après le moteur de raffinement) : les faits durables établis lors d’une session sont injectés dans les sessions ultérieures concernant le **même produit**, de sorte que le moteur ne repose jamais une question dont il connaît déjà la réponse. Ce n’est délibérément pas un journal : seul un ensemble borné de déclarations durables et catégorisées est conservé et réinjecté.
+La mémoire produit est le deuxième fossé défensif de RefineMap (après le moteur de raffinement) : les faits durables établis lors d’une session sont injectés dans les sessions ultérieures concernant le **même produit**, de sorte que le moteur ne pose jamais une question dont il connaît déjà la réponse. Ce n’est délibérément pas un journal : seul un ensemble borné de déclarations durables et catégorisées est conservé et réinjecté. Le document de conception `docs/product-memory.md` (note de commit de la fonctionnalité) décrit le pourquoi, les décisions de conception et la règle de durabilité avec ses exemples.
 
 ## Produits et faits (`src/models/product_memory.py`)
 
@@ -62,5 +63,5 @@ L’interface de curation se trouve dans la SPA : la page `/memory` (`ProductMem
 - **Quand consulter cette page :** lors de la modification des catégories de mémoire, de la règle de durabilité, du budget d’injection, de l’application des opérations ou de l’interface/API de curation de la mémoire.
 - **Invariants à préserver :** l’archivage et non la suppression ; le plafond de 40 faits ; le regroupement par catégorie après le plafond ; la sémantique de `confirmed` (ajout manuel = true, réécriture modèle = false, correction humaine = true) ; des opérations limitées au produit propriétaire ; la finalisation de session n’applique `memory_ops` que lorsque la session possède un `product_id`.
 - **Surface transversale entre paquets :** la liste des catégories est partagée par le modèle, le classifieur hors ligne, les prompts, les réglages de `CreateMemoryFactRequest` et l’interface mémoire du frontend (`CATEGORIES` de `ProductMemoryPage`, la bannière du War Room) — une modification de catégorie doit les toucher toutes.
-- **Tests ciblés :** il n’en existe pas encore ; les règles dans `product_memory_rules.py` et l’application des opérations dans `apply_ops` sont les candidats naturels pour un `tests/test_product_memory.py` dédié lorsqu’ils changent.
-- **Validation :** `python -m pytest tests/ -q`.
+- **Tests ciblés :** `tests/test_product_memory.py` verrouille la règle de durabilité, la classification, l’extraction mock et `apply_ops` (add/update/remove, doublons, ids étrangers, plafond, archivage, dégradation) ; `tests/test_product_memory_api.py` verrouille le contrat HTTP des endpoints produits/mémoire ; `tests/test_product_memory_flow.py` verrouille la boucle session → mémoire → session suivante. Voir [testing.md](../testing.md) pour le détail et les commandes.
+- **Validation :** `python -m pytest tests/test_product_memory.py tests/test_product_memory_api.py tests/test_product_memory_flow.py -q`.

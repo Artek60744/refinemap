@@ -18,16 +18,17 @@ RefineMap est un tableau de décision pour les équipes produit et tech : il tra
 
 ## Contexte système
 
-<!-- openwiki: mermaid parse failed and this diagram was converted to a text fence so it does not break rendering. Fix the diagram source and restore the mermaid fence. Parser error: Heuristic: an unescaped angle bracket inside a label breaks rendering; rephrase the label. -->
-```text
+```mermaid
 flowchart LR
-    U["Team"] --> FE["React SPA<br>nginx / Vite"]
+    U["Team"] --> FE["React SPA — nginx / Vite"]
     FE -->|"/api JSON"| API["FastAPI backend"]
     API --> LG["LangGraph workflow"]
-    LG --> LLM["LLM provider<br>mock or OpenAI-compatible"]
+    LG --> LLM["LLM provider — mock or OpenAI-compatible"]
     API --> DB[("PostgreSQL / SQLite")]
     LLM -->|"structured JSON"| LG
 ```
+
+Flux système : l'équipe pilote la SPA, qui appelle l'API en JSON ; le moteur LangGraph orchestre le LLM et la base de données reste la source de vérité.
 
 La SPA ne communique avec l'API qu'en JSON (`/api/refinement/*`, `/api/products*`, `/api/memory*`, `/api/settings`, `/health`) ; elle ne détient jamais d'identifiants LLM et n'effectue aucun appel IA. Le backend détient l'orchestration, la persistance et les secrets. En production, nginx sert la SPA compilée et fait office de reverse proxy pour l'API sur la même origine, donc pas de CORS (voir [operations/deployment.md](../operations/deployment.md)).
 
@@ -70,7 +71,7 @@ sequenceDiagram
 | Composant | Emplacement | Responsabilité |
 |---|---|---|
 | Point d'entrée API | `src/main.py` | Application FastAPI, `lifespan` exécute `init_db()`, `LanguageMiddleware` ASGI brut définit la ContextVar de langue par requête, `/health` renvoie le statut du fournisseur |
-| Paramètres | `src/config/settings.py` | Configuration d'environnement Pydantic-settings : URL de base de données, fournisseur/clés LLM, limites de raffinement (`refinement_max_rounds=3`, `min_rounds=2`, `max_questions_per_round=6`), `app_root`/`prompts_dir` |
+| Paramètres | `src/config/settings.py` | Configuration d'environnement Pydantic-settings : URL de base de données, fournisseur/clés LLM, limites de raffinement (`refinement_max_rounds=3`, `min_rounds=2`, `max_questions_per_round=6`), identité de l'utilisateur local (`default_user_email`, `default_user_name`), `asset_version` (jeton de cache-busting des assets statiques), `app_root`/`prompts_dir` |
 | Base de données | `src/database.py` | Moteur/session SQLAlchemy, dépendance `get_db`, `init_db` (create_all + migration ascendante écrite à la main + seed d'utilisateur par défaut) |
 | Moteur de raffinement | `src/agents/refinement_workflow/` | Machine à états LangGraph — voir [refinement-engine.md](refinement-engine.md) |
 | Services | `src/services/` | `refinement_service` (orchestration), `refinement_llm` (moteurs), `settings_service`, `product_memory_service`, `question_grids`, `product_memory_rules`, `artifact_renderer`, `prompt_loader` |

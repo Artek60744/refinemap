@@ -8,9 +8,9 @@ openwiki:
   change_kinds: [runtime, lifecycle]
   source_paths: [src/agents/refinement_workflow/graph.py, src/agents/refinement_workflow/nodes.py, src/agents/refinement_workflow/state.py, src/services/refinement_llm.py, src/services/refinement_service.py, prompts/]
   symbols: [create_refinement_graph, RefinementState, create_initial_state, route_start, route_after_summary, route_after_final, build_generate_questions_node, build_summarize_context_node, build_generate_final_refinement_node, build_extract_product_memory_node, MockRefinementLLM, OpenAICompatibleLLM, build_refinement_llm]
-  test_paths: [tests/test_routing.py, tests/test_mock_decision.py]
+  test_paths: [tests/test_routing.py, tests/test_mock_decision.py, tests/test_product_memory_flow.py]
   invariants: ["thread_id equals the session id. min_rounds caps below max_rounds and forces at least one follow-up pass. The LLM is never the persistence layer: nodes only compute, the repository persists. Any real-call failure degrades to the offline mock with degraded=True instead of a 500. A session without product_id skips the memory extraction node."]
-  validation_commands: [python -m pytest tests/test_routing.py tests/test_mock_decision.py -q]
+  validation_commands: [python -m pytest tests/test_routing.py tests/test_mock_decision.py tests/test_product_memory_flow.py -q]
 ---
 
 # Le moteur de raffinement — workflow LangGraph et couche LLM
@@ -27,21 +27,22 @@ Quatre nœuds, tous alimentés par le même `RefinementState` (un `TypedDict`, c
 `create_initial_state` ou reconstruit à partir de la session par
 `RefinementService._build_state_from_session`) :
 
-<!-- openwiki: mermaid parse failed and this diagram was converted to a text fence so it does not break rendering. Fix the diagram source and restore the mermaid fence. Parser error: Heuristic: an unescaped angle bracket inside a label breaks rendering; rephrase the label. -->
-```text
+```mermaid
 flowchart TD
-    START["START"] --> R1{"route_start<br>answers submitted?"}
+    START["START"] --> R1{"route_start — answers submitted?"}
     R1 -->|no| Q["generate_questions"]
     R1 -->|yes| S["summarize_context"]
-    S --> R2{"route_after_summary<br>round and enoughContext"}
+    S --> R2{"route_after_summary — round and enoughContext"}
     R2 -->|"round below min or not enough context"| Q
     R2 -->|"round at max, or enough context at min"| F["generate_final_refinement"]
-    F --> R3{"route_after_final<br>product attached?"}
+    F --> R3{"route_after_final — product attached?"}
     R3 -->|yes| M["extract_product_memory"]
-    R3 -->|no| FIN["end"]
-    Q --> FIN["end"]
-    M --> FIN["end"]
+    R3 -->|no| END1["end"]
+    Q --> END1["end"]
+    M --> END1["end"]
 ```
+
+Graphe de raffinement : les trois branchements de routage (`route_start`, `route_after_summary`, `route_after_final`) et le nœud mémoire terminal, ignoré sans produit.
 
 - **`generate_questions`** — appelle `llm.generate_questions` avec les axes de la grille comme
   colonne vertébrale, incrémente `round`, et stocke `latest_question_round` ainsi qu'une
@@ -158,10 +159,7 @@ sortie.
   [llm-configuration.md](../operations/llm-configuration.md) pour la surface complète
   (paramètres d'environnement, replis de configuration à l'exécution, URL/en-têtes, test du champ
   requis, UI).
-- **Tests ciblés :** `tests/test_routing.py` (matrice de routage) et
-  `tests/test_mock_decision.py` (règles de verdict) ; le comportement questions/résumé du mock
-  est exercé indirectement à travers ces tests — un fichier de test dédié au moteur mock est un
-  ajout naturel lorsque le moteur change.
-- **Validation :** `python -m pytest tests/test_routing.py tests/test_mock_decision.py -q` ;
+- **Tests ciblés :** `tests/test_routing.py` (matrice de routage), `tests/test_mock_decision.py` (règles de verdict) et `tests/test_product_memory_flow.py` (boucle complète `RefinementService` : démarrage, tours jusqu'au livrable, extraction mémoire, session suivante) ; le comportement questions/résumé du mock est exercé indirectement à travers ces tests — un fichier de test dédié au moteur mock est un ajout naturel lorsque le moteur change.
+- **Validation :** `python -m pytest tests/test_routing.py tests/test_mock_decision.py tests/test_product_memory_flow.py -q` ;
   test de fumée du flux hors ligne complet : `uvicorn src.main:app --reload --port 8000` puis
   `POST /api/refinement/sessions` avec `{"objective": "..."}` (fournisseur mock).

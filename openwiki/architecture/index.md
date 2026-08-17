@@ -1,4 +1,4 @@
-# Files
+# Fichiers
 
-- [RefineMap — System Architecture Overview](overview.md) - High-level architecture of RefineMap, the decision board for product and tech teams — React SPA, FastAPI backend, LangGraph refinement engine, SQLAlchemy/PostgreSQL persistence, pluggable LLM providers, and the request flow through a session.
-- [The Refinement Engine — LangGraph Workflow and LLM Layer](refinement-engine.md) - The differentiating core of RefineMap — the LangGraph state machine (generate questions, summarize context, final refinement, extract memory), its routing rules, the RefinementState shape, and the two LLM engines with JSON repair, retry and offline fallback.
+- [RefineMap — Vue d'ensemble de l'architecture système](overview.md) - Architecture de haut niveau de RefineMap, le tableau de décision pour les équipes produit et tech — SPA React, backend FastAPI, moteur de raffinement LangGraph, persistance SQLAlchemy/PostgreSQL, fournisseurs de LLM interchangeables et flux de requête à travers une session.
+- [Le moteur de raffinement — workflow LangGraph et couche LLM](refinement-engine.md) - Le cœur différenciateur de RefineMap — la machine à états LangGraph (générer des questions, résumer le contexte, raffinement final, extraire la mémoire), ses règles de routage, la forme de RefinementState, et les deux moteurs LLM avec réparation JSON, nouvelle tentative et repli hors ligne.

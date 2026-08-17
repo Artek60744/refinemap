@@ -1,4 +1,4 @@
-# Files
+# Fichiers
 
-- [Deployment, Docker and the Azure VM](deployment.md) - How RefineMap is deployed on its Azure VM — the deploy.sh workflow (dev sync vs prod deploy), the three Docker containers, cost control, what is never overwritten, transport channels, and the documented security limits.
-- [LLM Provider Configuration and Secret Handling](llm-configuration.md) - How RefineMap resolves and stores the LLM provider at runtime — the app_settings key/value store, env fallbacks per provider, Fernet encryption of the API key, masked hints, and the non-live connection test.
+- [Déploiement, Docker et la VM Azure](deployment.md) - Comment RefineMap est déployé sur sa VM Azure — le flux deploy.sh (sync en dev vs deploy en prod), les trois conteneurs Docker, le contrôle des coûts, ce qui n'est jamais écrasé, les canaux de transport et les limites de sécurité documentées.
+- [Configuration du fournisseur LLM et gestion des secrets](llm-configuration.md) - Comment RefineMap résout et stocke le fournisseur LLM à l’exécution — le magasin clé/valeur app_settings, les replis d’environnement par fournisseur, le chiffrement Fernet de la clé API, les indices masqués et le test de connexion non live.

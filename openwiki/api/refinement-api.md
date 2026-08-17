@@ -8,8 +8,9 @@ openwiki:
   change_kinds: [public-api]
   source_paths: [src/api/refinement.py, src/api/product_memory.py, src/api/settings.py, src/api/schemas_refinement.py, src/api/schemas_settings.py]
   symbols: [refinement_api_router, product_memory_api_router, settings_api_router, StrictModel, CreateSessionRequest, SubmitAnswersRequest, SessionDetailResponse, StartSessionResponse]
+  test_paths: [tests/test_product_memory_api.py, tests/test_artifact_renderer.py]
   invariants: ["All request/response schemas are StrictModel (extra=forbid). KeyError maps to 404, ValueError maps to 400. The LLM API key is never returned to the client, only a masked hint."]
-  validation_commands: [python -m pytest tests/ -q]
+  validation_commands: [python -m pytest tests/test_product_memory_api.py tests/test_artifact_renderer.py -q]
 ---
 
 # API de raffinement, de mémoire produit et de paramètres
@@ -102,11 +103,5 @@ basée sur les objectifs et qui ne correspond pas aux routes implémentées.
 - **Surface inter-paquets :** toute modification de schéma backend doit être
   répercutée dans `frontend/src/types/api.ts`, et les modifications des
   consommateurs suivent dans `frontend/src/api/refinement.ts` / `settings.ts`.
-- **Tests ciblés :** le comportement de schéma testé aujourd'hui est la migration
-  et la normalisation de `DecisionReport` (`tests/test_artifact_renderer.py`) ;
-  il n'existe pas encore de suite de tests pour le client API — des tests de fumée
-  des points de terminaison nécessiteraient un client de test ainsi qu'une base
-  SQLite temporaire.
-- **Validation :** `python -m pytest tests/ -q` ; pour un test de fumée manuel,
-  démarrez le serveur et exécutez `POST /api/refinement/sessions` avec
-  `{"objective": "Test subject"}` (provider simulé par défaut).
+- **Tests ciblés :** le contrat HTTP des endpoints produits/mémoire est verrouillé par `tests/test_product_memory_api.py` (création idempotente par nom, `factCount` actifs uniquement, fait manuel confirmé, catégorie inconnue repliée, correction = confirmation, patch vide rejeté, archive vs suppression, cascade produit, 404 uniformes, 400 sur blancs, session sur produit inconnu -> 404) ; la migration et la normalisation de `DecisionReport` sont verrouillées par `tests/test_artifact_renderer.py`. Il n'existe **pas encore** de suite TestClient pour les endpoints de session (`/api/refinement/sessions*`) — leur boucle est couverte au niveau service par `tests/test_product_memory_flow.py`.
+- **Validation :** `python -m pytest tests/test_product_memory_api.py tests/test_artifact_renderer.py -q` ; pour un test de fumée manuel, démarrez le serveur et exécutez `POST /api/refinement/sessions` avec `{"objective": "Test subject"}` (provider simulé par défaut).

@@ -34,16 +34,17 @@ Un `model_validator` (`_migrate_v1`) fait correspondre le premier format de rapp
 
 Le moteur hors ligne (`MockRefinementLLM._build_decision_report`) applique des règles ordonnées sur les faits, inconnues, risques, hypothèses et niveau de confiance de la session — c'est la logique exacte que le moteur réel est invité à reproduire, et les règles sont verrouillées par les tests :
 
-<!-- openwiki: l'analyse mermaid a échoué et ce diagramme a été converti en bloc texte pour ne pas casser le rendu. Corrigez la source du diagramme et restaurez le délimiteur mermaid. Erreur d'analyse : heuristique — un chevron non échappé dans un libellé casse le rendu ; reformulez le libellé. -->
-```text
+```mermaid
 flowchart TD
-    A["facts empty and unknowns >= 3"] -->|yes| DROP["drop / high"]
-    A -->|no| B["no unknowns and confidence high<br>and risks <= 1"]
+    A["no facts and at least 3 unknowns"] -->|yes| DROP["drop / high"]
+    A -->|no| B["no unknowns and high confidence, at most 1 risk"]
     B -->|yes| GO["go / high"]
-    B -->|no| C["risks >= 3 or risks > facts"]
+    B -->|no| C["risks at least 3 or outnumber facts"]
     C -->|yes| REWORK["rework / medium"]
     C -->|no| EXPLORE["explore / medium"]
 ```
+
+Arbitrage déterministe du moteur mock : quatre règles ordonnées, de la plus contraignante (drop) à la plus permissive (explore).
 
 Ensuite, à partir d'une source de vérité unique (l'élément bloquant) :
 
