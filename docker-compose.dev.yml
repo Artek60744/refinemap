@@ -3,6 +3,10 @@
 #
 # Used automatically by ./deploy.sh dev and ./deploy.sh sync.
 # Never applied by ./deploy.sh deploy, which rebuilds the image instead.
+#
+# The `openwiki` service runs the real-time docs watcher. It is meant for local
+# dev: on the VM (./deploy.sh dev) it would fall back to full regenerations
+# because the repo there has no .git. It needs .env with DEEPSEEK_API_KEY.
 services:
   app:
     volumes:
@@ -19,3 +23,21 @@ services:
       - --reload
       - --reload-dir
       - /app/src
+
+  openwiki:
+    build:
+      context: .
+      dockerfile: Dockerfile.openwiki
+    working_dir: /repo
+    volumes:
+      - .:/repo
+    environment:
+      OPENWIKI_PROVIDER: openai-compatible
+      OPENAI_COMPATIBLE_BASE_URL: "${DEEPSEEK_ENDPOINT:-https://api.deepseek.com}/v1"
+      OPENAI_COMPATIBLE_API_KEY: "${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY absent de .env}"
+      OPENWIKI_MODEL_ID: "${DEEPSEEK_MODEL:-deepseek-v4-flash}"
+      OPENWIKI_TELEMETRY_DISABLED: "1"
+    command:
+      - sh
+      - -c
+      - "test -x node_modules/.bin/openwiki || npm ci; npm run docs:watch"

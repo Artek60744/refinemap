@@ -20,7 +20,7 @@ function update() {
   console.log(`\n[openwiki] changement détecté — mise à jour de la doc...`);
   const started = Date.now();
   try {
-    execSync("npx openwiki code --update --print", {
+    execSync("npx openwiki code --update --print --language fr", {
       stdio: "inherit",
       cwd: process.cwd(),
     });

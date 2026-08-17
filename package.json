@@ -4,7 +4,7 @@
   "description": "OpenWiki : documentation temps réel + graphe de connaissance pour RefineMap",
   "scripts": {
     "docs:init": "openwiki --init",
-    "docs:update": "openwiki code --update --print",
+    "docs:update": "openwiki code --update --print --language fr",
     "docs:watch": "node scripts/openwiki-watch.mjs",
     "docs:visualize": "openwiki visualize openwiki"
   },

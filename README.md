@@ -150,14 +150,14 @@ les limites de sécurité actuelles.
 ## Documentation temps réel (OpenWiki)
 
 Le repo embarque [OpenWiki](https://github.com/langchain-ai/openwiki), un CLI qui
-génère et maintient un wiki Markdown de la codebase dans `openwiki/`, visualisable
-sous forme de **graphe de connaissances** interactif. La doc se met à jour
-automatiquement à chaque changement de code.
+génère et maintient un wiki Markdown de la codebase dans `openwiki/` — **en
+français** — visualisable sous forme de **graphe de connaissances** interactif.
+La doc se met à jour automatiquement à chaque changement de code.
 
 ```bash
 npm install            # une fois : installe le CLI (devDependency)
 npm run docs:init      # première génération interactive (provider / clé / modèle)
-npm run docs:update    # régénérer la doc (one-shot, non interactif)
+npm run docs:update    # régénérer la doc (one-shot, non interactif, en français)
 npm run docs:watch     # temps réel : surveille src/, frontend/src/, contracts/
                        # et met à jour la doc à chaque changement (debounce 8 s)
 npm run docs:visualize # graphe de connaissances interactif (127.0.0.1:4321)
@@ -167,6 +167,14 @@ npm run docs:visualize # graphe de connaissances interactif (127.0.0.1:4321)
 - OpenWiki maintient `AGENTS.md` et `CLAUDE.md` (bloc `OPENWIKI:START/END`) pour
   pointer les agents vers le wiki.
 - Le périmètre lu par la doc est contrôlé par `.openwikiignore`.
+
+### Watcher dans le compose dev
+
+Le stack dev (`docker compose -f docker-compose.yml -f docker-compose.dev.yml up`)
+lance aussi un service `openwiki` qui surveille `src/`, `frontend/src/` et
+`contracts/` et régénère la doc en parallèle pendant que vous codez. Il lit
+`DEEPSEEK_API_KEY`, `DEEPSEEK_ENDPOINT` et `DEEPSEEK_MODEL` depuis le `.env` du
+repo. Logs : `docker compose logs -f openwiki`.
 
 ### Configurer DeepSeek
 
