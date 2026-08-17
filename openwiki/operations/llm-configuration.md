@@ -1,7 +1,7 @@
 ---
-type: Operations
-title: LLM Provider Configuration and Secret Handling
-description: How RefineMap resolves and stores the LLM provider at runtime — the app_settings key/value store, env fallbacks per provider, Fernet encryption of the API key, masked hints, and the non-live connection test.
+type: Opérations
+title: Configuration du fournisseur LLM et gestion des secrets
+description: Comment RefineMap résout et stocke le fournisseur LLM à l’exécution — le magasin clé/valeur app_settings, les replis d’environnement par fournisseur, le chiffrement Fernet de la clé API, les indices masqués et le test de connexion non live.
 tags: [operations, llm, configuration, security, encryption]
 openwiki:
   roles: [operations]
@@ -12,83 +12,47 @@ openwiki:
   validation_commands: [python -m pytest tests/ -q]
 ---
 
-# LLM Provider Configuration and Secret Handling
+# Configuration du fournisseur LLM et gestion des secrets
 
-LLM provider configuration is stored at runtime in the `app_settings` table
-(key/value), managed by `SettingsService`, and consumed by
-`RefinementService._build_runtime_components` to construct the engine (see
-[refinement-engine.md](../architecture/refinement-engine.md)).
+La configuration du fournisseur LLM est stockée à l’exécution dans la table `app_settings` (clé/valeur), gérée par `SettingsService`, et consommée par `RefinementService._build_runtime_components` pour construire le moteur (voir [refinement-engine.md](../architecture/refinement-engine.md)).
 
-## Storage model
+## Modèle de stockage
 
-- `AppSetting` (`src/models/app_settings.py`): `key` PK, `value`, `is_encrypted`,
-  `description`, `category` (`general` | `llm`), timestamps with indexes on
-  `category` and `updated_at`.
-- `SettingKeys`: `llm_provider`, `llm_endpoint`, `llm_api_key`, `llm_deployment`,
-  `llm_model`. `SENSITIVE_SETTING_KEYS = {LLM_API_KEY}` drives the encrypted flag.
-- `SettingsRepository.set` upserts; `get` reads raw values.
+- `AppSetting` (`src/models/app_settings.py`) : `key` clé primaire, `value`, `is_encrypted`, `description`, `category` (`general` | `llm`), horodatages avec index sur `category` et `updated_at`.
+- `SettingKeys` : `llm_provider`, `llm_endpoint`, `llm_api_key`, `llm_deployment`, `llm_model`. `SENSITIVE_SETTING_KEYS = {LLM_API_KEY}` pilote l’indicateur de chiffrement.
+- `SettingsRepository.set` effectue un upsert ; `get` lit les valeurs brutes.
 
-## Resolution order (`SettingsService.get_runtime_config`)
+## Ordre de résolution (`SettingsService.get_runtime_config`)
 
-1. `provider` — from `app_settings`, falling back to env
-   (`settings.llm_provider`, default `mock`).
-2. Endpoint / model / key env fallbacks **depend on the provider**:
-   - `deepseek` -> `settings.deepseek_api_key` / `deepseek_model` /
-     `deepseek_endpoint`;
-   - everything else -> `azure_ai_key or openai_api_key` / `openai_model` /
-     `azure_ai_endpoint`;
-   - `deployment` falls back to `settings.azure_ai_model_id`.
-3. A database value always wins over the env fallback, so saving the provider
-   through the UI overrides the `.env`. Setting only the provider + its key in the
-   `.env` is enough — no UI save required.
+1. `provider` — depuis `app_settings`, avec repli sur l’environnement (`settings.llm_provider`, défaut `mock`).
+2. Les replis d’environnement pour endpoint / modèle / clé **dépendent du fournisseur** :
+   - `deepseek` -> `settings.deepseek_api_key` / `deepseek_model` / `deepseek_endpoint` ;
+   - tout autre -> `azure_ai_key or openai_api_key` / `openai_model` / `azure_ai_endpoint` ;
+   - `deployment` retombe sur `settings.azure_ai_model_id`.
+3. Une valeur en base l’emporte toujours sur le repli d’environnement ; ainsi, enregistrer le fournisseur via l’interface utilisateur écrase le `.env`. Il suffit de définir le fournisseur et sa clé dans le `.env` — aucun enregistrement via l’interface n’est requis.
 
-## Saving and secrets
+## Enregistrement et secrets
 
-- `save_settings` persists provider/endpoint/deployment/model as plain values and
-  the API key **only if the submitted key is non-empty** (the UI sends an empty
-  field to keep the current key; see `SettingsPage`). The key is encrypted with
-  `EncryptionService` (Fernet over SHA-256-derived key from `SECRET_KEY`).
-- The API never returns the raw key: `get_all_settings` returns `keyConfigured:
-  bool` and a masked `keyHint` (`****` + last 4 chars) plus the `source`
-  ("database" when the setting row exists, else "environment").
-- `decrypt_value` returns `None` on `InvalidToken` or any decryption error rather
-  than raising, so a corrupted stored key degrades to the env fallback instead of
-  crashing requests.
+- `save_settings` enregistre le fournisseur/l’endpoint/le déploiement/le modèle en clair, et la clé API **uniquement si la clé soumise est non vide** (l’interface envoie un champ vide pour conserver la clé actuelle ; voir `SettingsPage`). La clé est chiffrée avec `EncryptionService` (Fernet avec une clé dérivée de `SECRET_KEY` via SHA-256).
+- L’API ne renvoie jamais la clé brute : `get_all_settings` retourne `keyConfigured: bool` et un `keyHint` masqué (`****` + 4 derniers caractères), ainsi que `source` ("database" lorsque la ligne de réglage existe, sinon "environment").
+- `decrypt_value` renvoie `None` sur `InvalidToken` ou toute erreur de déchiffrement, au lieu de lever une exception ; ainsi, une clé stockée corrompue retombe sur le repli d’environnement plutôt que de faire échouer les requêtes.
 
-## Connection test
+## Test de connexion
 
-`POST /api/settings/test/llm` (`ConnectionTestRequest`, all fields optional —
-unsent fields fall back to the runtime config; see the
-[settings endpoints](../api/refinement-api.md)) is **deliberately non-live**: it
-validates field completeness per provider and returns `success` with
-`details.liveInvocation: false`. Required fields:
+`POST /api/settings/test/llm` (`ConnectionTestRequest`, tous les champs sont facultatifs — les champs non envoyés retombent sur la configuration d’exécution ; voir les [points de terminaison des paramètres](../api/refinement-api.md)) est **volontairement non live** : il valide la complétude des champs par fournisseur et renvoie `success` avec `details.liveInvocation: false`. Champs requis :
 
-- `mock` — always success.
-- `azure-foundry` / `azure-openai` — api key, endpoint, deployment.
-- `openai` / `openrouter` / `deepseek` — api key, model.
-- anything else — "unsupported provider".
+- `mock` — toujours un succès.
+- `azure-foundry` / `azure-openai` — clé API, endpoint, déploiement.
+- `openai` / `openrouter` / `deepseek` — clé API, modèle.
+- tout autre fournisseur — « fournisseur non pris en charge ».
 
-## Provider support in the engine
+## Prise en charge des fournisseurs dans le moteur
 
-`build_refinement_llm` uses a real `OpenAICompatibleLLM` only when
-`provider != "mock"` **and** an API key is configured; otherwise `MockRefinementLLM`.
-Supported providers: `mock`, `azure-foundry`, `azure-openai`, `openai`,
-`openrouter`, `deepseek` (see the Azure URL construction and the DeepSeek
-`reasoning_effort` note in [refinement-engine.md](../architecture/refinement-engine.md)).
+`build_refinement_llm` utilise un vrai `OpenAICompatibleLLM` uniquement lorsque `provider != "mock"` **et** qu’une clé API est configurée ; sinon, `MockRefinementLLM`. Fournisseurs pris en charge : `mock`, `azure-foundry`, `azure-openai`, `openai`, `openrouter`, `deepseek` (voir la construction de l’URL Azure et la note sur `reasoning_effort` de DeepSeek dans [refinement-engine.md](../architecture/refinement-engine.md)).
 
-## Change guidance
+## Recommandations de modification
 
-- **When to consult this page:** adding a provider, changing required fields,
-  changing env fallbacks, or touching secret handling.
-- **Invariants to preserve:** empty key keeps stored key; encrypted at rest with
-  Fernet; masked hints only in responses; database wins over env in runtime config;
-  the test endpoint stays non-live (it is a completeness check, not a network
-  probe); `decrypt_value` never raises.
-- **Extension seams for a new provider:** add env fields in `src/config/settings.py`,
-  provider-specific fallbacks in `get_runtime_config`, provider defaults in
-  `OpenAICompatibleLLM._url`, required fields in `test_llm`, the UI entry in
-  `frontend/src/pages/SettingsPage.tsx` (`LLM_FIELDS_BY_PROVIDER`) and catalog
-  strings in `frontend/src/i18n/catalog.ts`.
-- **Validation:** `python -m pytest tests/ -q` (no settings-specific tests exist
-  yet); manual smoke: save mock via the settings page, confirm the connection test
-  succeeds, and confirm `GET /api/settings` never contains a raw key.
+- **Quand consulter cette page :** ajout d’un fournisseur, modification des champs requis, changement des replis d’environnement, ou intervention sur la gestion des secrets.
+- **Invariants à préserver :** une clé vide conserve la clé stockée ; chiffrement au repos avec Fernet ; seuls des indices masqués sont exposés dans les réponses ; la base de données prime sur l’environnement dans la configuration d’exécution ; le point de terminaison de test reste non live (il s’agit d’une vérification de complétude, pas d’une sonde réseau) ; `decrypt_value` ne lève jamais d’exception.
+- **Points d’extension pour un nouveau fournisseur :** ajouter les champs d’environnement dans `src/config/settings.py`, les replis spécifiques au fournisseur dans `get_runtime_config`, les valeurs par défaut du fournisseur dans `OpenAICompatibleLLM._url`, les champs requis dans `test_llm`, l’entrée d’interface dans `frontend/src/pages/SettingsPage.tsx` (`LLM_FIELDS_BY_PROVIDER`) et les chaînes de catalogue dans `frontend/src/i18n/catalog.ts`.
+- **Validation :** `python -m pytest tests/ -q` (aucun test spécifique aux paramètres n’existe encore) ; test de fumée manuel : enregistrer `mock` via la page des paramètres, vérifier que le test de connexion réussit, et vérifier que `GET /api/settings` ne contient jamais de clé brute.

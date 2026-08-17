@@ -1,7 +1,7 @@
 ---
-type: Domain Concept
-title: Data Model and Session Lifecycle
-description: The SQLAlchemy persistence layer of RefineMap — every entity behind a refinement session (session, snapshot, question round, question, answer, summary, artifact), the product memory tables, app settings, the session status lifecycle, and the artifact journal.
+type: Concept de domaine
+title: Modèle de données et cycle de vie des sessions
+description: La couche de persistance SQLAlchemy de RefineMap — chaque entité derrière une session de raffinement (session, instantané, tour de questions, question, réponse, résumé, artefact), les tables de mémoire produit, les paramètres d’application, le cycle de vie des statuts de session et le journal des artefacts.
 tags: [domain, data-model, persistence, sqlalchemy]
 openwiki:
   roles: [domain]
@@ -12,14 +12,11 @@ openwiki:
   validation_commands: [python -m pytest tests/ -q]
 ---
 
-# Data Model and Session Lifecycle
+# Modèle de données et cycle de vie des sessions
 
-PostgreSQL is the source of truth in production (SQLite locally); LangGraph
-checkpoints are never the only home of answers or outputs. The model is
-session-centric today — the decision-board domain (workspace / board / node / score /
-export) from `docs/sqlalchemy-data-model.md` is the target, not yet implemented.
+PostgreSQL est la source de vérité en production (SQLite en local) ; les checkpoints LangGraph ne sont jamais le seul dépôt des réponses ou des sorties. Le modèle est aujourd’hui centré sur la session — le domaine decision-board (workspace / board / node / score / export) décrit dans `docs/sqlalchemy-data-model.md` est l’objectif visé, pas encore implémenté.
 
-## Entities (`src/models/refinement.py`)
+## Entités (`src/models/refinement.py`)
 
 ```mermaid
 erDiagram
@@ -36,26 +33,23 @@ erDiagram
     REFINEMENT_SESSIONS }o--o| PRODUCTS : "optionally scoped to"
 ```
 
-| Table | Purpose | Key fields |
+| Table | Objectif | Champs clés |
 |---|---|---|
-| `users` | Single local user today (auth not built) | `email` unique, `display_name` |
-| `refinement_sessions` | One refinement run | `user_id`, `product_id` (nullable), `subject_id`, `mode`, `grid`, `detected_grid`, `status`, `round`, `max_rounds`, `max_questions_per_round`, `extra_context`, `prompt_version`, `llm_provider`, `llm_model`, `completed_at` |
-| `subject_snapshots` | The subject as entered at creation (and after grid changes) | `source`, `normalized_payload` JSON, `raw_payload` JSON |
-| `question_rounds` | One round of questions | `round_number`, `status` (OPEN/ANSWERED), `reasoning_summary`, `missing_areas`, `potential_risks` |
-| `questions` | One question of a round | `external_id`, `theme`, `priority`, `question_text`, `why_text`, `suggestions` JSON (nullable for rows created before the column existed) |
-| `answers` | Answer to a question | `answer_text` |
-| `session_summaries` | One summary per round | `facts`, `assumptions`, `unknowns`, `dependencies`, `risks`, `confidence`, `enough_context`, `reason` |
-| `session_artifacts` | Versioned journal of everything produced | `type` (`SUBJECT_SNAPSHOT`, `QUESTION_ROUND`, `SESSION_SUMMARY`, `FINAL_REFINEMENT`), `version`, `payload` JSON |
-| `products` | Product memory scope | `name` (case-insensitive lookup), `user_id` |
-| `product_memory_facts` | One durable fact | `category`, `statement`, `status`, `confirmed`, `source_session_id`, `uses` |
-| `app_settings` | Key/value runtime config (LLM provider) | `key` PK, `value`, `is_encrypted`, `category`, indexes on `category` and `updated_at` |
+| `users` | Utilisateur local unique aujourd’hui (authentification non construite) | `email` unique, `display_name` |
+| `refinement_sessions` | Une exécution de raffinement | `user_id`, `product_id` (nullable), `subject_id`, `mode`, `grid`, `detected_grid`, `status`, `round`, `max_rounds`, `max_questions_per_round`, `extra_context`, `prompt_version`, `llm_provider`, `llm_model`, `completed_at` |
+| `subject_snapshots` | Le sujet tel qu’il a été saisi à la création (et après les changements de grille) | `source`, `normalized_payload` JSON, `raw_payload` JSON |
+| `question_rounds` | Un tour de questions | `round_number`, `status` (OPEN/ANSWERED), `reasoning_summary`, `missing_areas`, `potential_risks` |
+| `questions` | Une question d’un tour | `external_id`, `theme`, `priority`, `question_text`, `why_text`, `suggestions` JSON (nullable pour les lignes créées avant l’existence de la colonne) |
+| `answers` | Réponse à une question | `answer_text` |
+| `session_summaries` | Un résumé par tour | `facts`, `assumptions`, `unknowns`, `dependencies`, `risks`, `confidence`, `enough_context`, `reason` |
+| `session_artifacts` | Journal versionné de tout ce qui est produit | `type` (`SUBJECT_SNAPSHOT`, `QUESTION_ROUND`, `SESSION_SUMMARY`, `FINAL_REFINEMENT`), `version`, `payload` JSON |
+| `products` | Périmètre de la mémoire produit | `name` (recherche insensible à la casse), `user_id` |
+| `product_memory_facts` | Un fait durable | `category`, `statement`, `status`, `confirmed`, `source_session_id`, `uses` |
+| `app_settings` | Configuration d’exécution clé/valeur (fournisseur LLM) | `key` PK, `value`, `is_encrypted`, `category`, index sur `category` et `updated_at` |
 
-All ids are UUID strings (`uuid4().hex`). Every `RefinementSession` relationship
-declares `cascade="all, delete-orphan"`, so deleting a session removes rounds,
-questions, answers, snapshots, summaries and artifacts together
-(`delete_session`).
+Tous les identifiants sont des chaînes UUID (`uuid4().hex`). Chaque relation de `RefinementSession` déclare `cascade="all, delete-orphan"`, donc la suppression d’une session supprime ensemble les tours, questions, réponses, instantanés, résumés et artefacts (`delete_session`).
 
-## Session lifecycle
+## Cycle de vie d’une session
 
 ```mermaid
 stateDiagram-v2
@@ -67,58 +61,29 @@ stateDiagram-v2
     FINAL_READY --> [*]
 ```
 
-The transitions are driven by `RefinementRepository`:
+Les transitions sont pilotées par `RefinementRepository` :
 
-- `create_session` -> `DRAFT`; `add_question_round` -> `QUESTIONING` (and sets
-  `session.round`);
-- `record_answers` -> the open round becomes `ANSWERED`, the session `ANALYZING`;
-  it also **upserts** answers per question so re-submitting a round edits, not
-  duplicates;
-- `add_final_artifact` -> `FINAL_READY` and stamps `completed_at`;
-- `reset_rounds` (grid change via `set_mode`) purges answers, rounds and summaries,
-  resets `round=0`, `status=DRAFT`, `completed_at=None`, then replays round 0 on the
-  new grid.
+- `create_session` -> `DRAFT` ; `add_question_round` -> `QUESTIONING` (et définit `session.round`) ;
+- `record_answers` -> le tour ouvert passe à `ANSWERED` et la session à `ANALYZING` ; cette méthode effectue aussi un **upsert** des réponses par question, afin que la re-soumission d’un tour modifie les réponses au lieu de les dupliquer ;
+- `add_final_artifact` -> `FINAL_READY` et renseigne `completed_at` ;
+- `reset_rounds` (changement de grille via `set_mode`) purge les réponses, les tours et les résumés, réinitialise `round=0`, `status=DRAFT`, `completed_at=None`, puis rejoue le tour 0 sur la nouvelle grille.
 
-## Artifact journal
+## Journal des artefacts
 
-`add_artifact` versions every produced payload per `(session_id, type)` and appends
-to `session_artifacts` — the immutable history of a session. The `FINAL_REFINEMENT`
-artifact's payload is what `GET /api/refinement/sessions/{id}` validates into a
-`RefinementDeliverable` (with the v1 decision-report migration, see
-[decision-report.md](decision-report.md)).
+`add_artifact` versionne chaque payload produit pour chaque `(session_id, type)` et l’ajoute à `session_artifacts` — l’historique immuable d’une session. C’est le payload de l’artefact `FINAL_REFINEMENT` que `GET /api/refinement/sessions/{id}` valide en un `RefinementDeliverable` (avec la migration v1 du rapport de décision, voir [decision-report.md](decision-report.md)).
 
-## Schema bootstrap and forward migration
+## Initialisation du schéma et migration incrémentale
 
-`src/database.py`:
+`src/database.py` :
 
-- engine/session factory created from `settings.database_url` (SQLite gets
-  `check_same_thread: False`; `echo` controlled by `database_echo`);
-- `init_db()` runs `Base.metadata.create_all`, then `_add_missing_columns()`, which
-  hand-applies columns added to pre-existing tables (currently
-  `questions.suggestions` JSON and `refinement_sessions.product_id` VARCHAR), then
-  seeds the default local user (`settings.default_user_email`).
-- **There is no Alembic setup yet** (`alembic` is in `requirements.txt`, no
-  `alembic.ini` in the repo); schema evolution is `create_all` + the hand-rolled
-  migration. This is a known limitation documented in
-  [operations/deployment.md](../operations/deployment.md) and tracked in the
-  quickstart backlog.
+- la fabrique d’engine/session est créée à partir de `settings.database_url` (pour SQLite, `check_same_thread: False` ; `echo` est contrôlé par `database_echo`) ;
+- `init_db()` exécute `Base.metadata.create_all`, puis `_add_missing_columns()` (qui applique manuellement les colonnes ajoutées aux tables préexistantes — actuellement `questions.suggestions` JSON et `refinement_sessions.product_id` VARCHAR), puis initialise l’utilisateur local par défaut (`settings.default_user_email`).
+- **Il n’y a pas encore de configuration Alembic** (`alembic` figure dans `requirements.txt`, aucun `alembic.ini` dans le dépôt) ; l’évolution du schéma se fait via `create_all` + la migration écrite à la main. C’est une limitation connue, documentée dans [operations/deployment.md](../operations/deployment.md) et suivie dans le backlog du quickstart.
 
-## Change guidance
+## Recommandations de modification
 
-- **When to consult this page:** adding or changing a table/column, changing session
-  status semantics, or touching repository queries.
-- **Invariants to preserve:** cascade delete behavior; the artifact journal for any
-  new LLM output; the session status sequence; nullable-new-column convention (new
-  columns on existing tables should be nullable so the hand-rolled migration stays
-  safe); `ilike` for portable search (`list_sessions` compiles to `lower() LIKE
-  lower()` on SQLite).
-- **Extending persistence:** add the model, register it in `src/models/__init__.py`,
-  add repository methods in `src/repositories/`, then add the column to
-  `_add_missing_columns` in `src/database.py` if the table may already exist in
-  deployed databases. Do not hand-edit a deployed database.
-- **Focused tests:** none exist for the model layer; the most valuable additions
-  are lifecycle transition tests (submit answers twice, grid reset, delete cascade)
-  using a temporary SQLite database.
-- **Validation:** `python -m pytest tests/ -q` (offline suites), plus a manual
-  smoke run `uvicorn src.main:app --reload --port 8000` to confirm `init_db`
-  succeeds on a fresh database.
+- **Quand consulter cette page :** lors de l’ajout ou de la modification d’une table/colonne, lors d’un changement de la sémantique des statuts de session, ou lorsqu’il faut toucher aux requêtes du repository.
+- **Invariants à préserver :** le comportement de suppression en cascade ; le journal des artefacts pour toute nouvelle sortie LLM ; la séquence des statuts de session ; la convention des nouvelles colonnes nullables (les nouvelles colonnes sur des tables existantes doivent être nullables pour que la migration écrite à la main reste sûre) ; `ilike` pour une recherche portable (`list_sessions` est compilé en `lower() LIKE lower()` sur SQLite).
+- **Extension de la persistance :** ajouter le modèle, l’enregistrer dans `src/models/__init__.py`, ajouter les méthodes du repository dans `src/repositories/`, puis ajouter la colonne à `_add_missing_columns` dans `src/database.py` si la table peut déjà exister dans les bases déployées. Ne pas modifier manuellement une base déployée.
+- **Tests ciblés :** aucun test n’existe pour la couche modèle ; les ajouts les plus précieux sont des tests de transition du cycle de vie (soumission des réponses deux fois, réinitialisation de la grille, suppression en cascade) à l’aide d’une base SQLite temporaire.
+- **Validation :** `python -m pytest tests/ -q` (suites de tests hors ligne), plus un test de fumée manuel `uvicorn src.main:app --reload --port 8000` pour confirmer que `init_db` réussit sur une base de données vierge.

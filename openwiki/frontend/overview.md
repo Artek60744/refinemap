@@ -1,7 +1,7 @@
 ---
 type: Architecture
-title: Frontend SPA — Routes, Pages and i18n
-description: The React 18 + TypeScript + Vite + Tailwind frontend of RefineMap — client routes, the pages behind each route (including the product-memory curation surface), the navigation shells, the API client, the shared i18n catalog with the lang cookie, and the build/validation commands.
+title: Frontend SPA — Routes, pages et i18n
+description: Le frontend React 18 + TypeScript + Vite + Tailwind de RefineMap — les routes client, les pages derrière chaque route (y compris la surface de curation de la mémoire produit), les coques de navigation, le client API, le catalogue i18n partagé avec le cookie lang, et les commandes de build/validation.
 tags: [frontend, react, typescript, vite, i18n]
 openwiki:
   roles: [architecture]
@@ -12,137 +12,68 @@ openwiki:
   validation_commands: [cd frontend && npm run build]
 ---
 
-# Frontend SPA — Routes, Pages and i18n
+# Frontend SPA — Routes, pages et i18n
 
-The frontend is a React 18 + TypeScript SPA built with Vite and styled with Tailwind
-CSS v4. It speaks only to the FastAPI backend over JSON; it never calls an LLM
-directly. In production nginx serves the built bundle and proxies `/api` and
-`/health`; in dev, Vite proxies the same paths to `http://localhost:8000`
-(override with `BACKEND_URL`).
+Le frontend est une SPA React 18 + TypeScript construite avec Vite et stylée avec Tailwind CSS v4. Elle ne communique qu'avec le backend FastAPI via JSON ; elle n'appelle jamais directement un LLM. En production, nginx sert le bundle compilé et proxifie `/api` et `/health` ; en développement, Vite proxifie les mêmes chemins vers `http://localhost:8000` (surchargez avec `BACKEND_URL`).
 
 ## Routes (`frontend/src/App.tsx`)
 
-| Route | Page | Purpose |
+| Route | Page | Objectif |
 |---|---|---|
-| `/` and `/refinement` | `RefinementHome` | Capture the raw idea and pick the product scope (which memory feeds the session) |
-| `/refinement/choose` | `ChooseGrid` | Pick posture (PO / Technique / Hybride) — guarded: redirects home without an objective in location state |
-| `/refinement/sessions/:sessionId` | `WarRoom` | The main 3-zone refinement screen |
-| `/refinement/sessions/:sessionId/result` | `SessionResultPage` | Final deliverable read-only view |
-| `/refinement/history` | `HistoryPage` | Session list, search, status filter, rename, delete, re-export |
-| `/memory` | `ProductMemoryPage` | Product memory curation: product list, facts grouped by category, add / edit / confirm / archive |
-| `/settings` | `SettingsPage` | LLM provider configuration and connection test |
-| `*` | redirect | Unknown routes -> `/refinement` |
+| `/` and `/refinement` | `RefinementHome` | Capturer l'idée brute et choisir le périmètre produit (quelle mémoire alimente la session) |
+| `/refinement/choose` | `ChooseGrid` | Choisir la posture (PO / Technique / Hybride) — protégée : redirige vers l'accueil en l'absence d'objectif dans l'état de localisation |
+| `/refinement/sessions/:sessionId` | `WarRoom` | L'écran principal de raffinement à 3 zones |
+| `/refinement/sessions/:sessionId/result` | `SessionResultPage` | Vue en lecture seule du livrable final |
+| `/refinement/history` | `HistoryPage` | Liste des sessions, recherche, filtre par statut, renommage, suppression, ré-exportation |
+| `/memory` | `ProductMemoryPage` | Curation de la mémoire produit : liste des produits, faits groupés par catégorie, ajout / modification / confirmation / archivage |
+| `/settings` | `SettingsPage` | Configuration du fournisseur LLM et test de connexion |
+| `*` | redirect | Routes inconnues -> `/refinement` |
 
-## Navigation shells
+## Coques de navigation
 
-Two shells, chosen per route in `App.tsx`:
+Deux coques, choisies par route dans `App.tsx` :
 
-- **`TopNavBar`** — fixed top bar with Dashboard / History / Memory links plus
-  right-side children (settings, avatar). Used by `RefinementHome`, `HistoryPage`
-  and `ProductMemoryPage` (`active` prop highlights the current tab).
-- **`Layout`** — sidebar shell with Refinement / History / Memory / Settings /
-  Health links and the language switcher. Used by `SessionResultPage` and
-  `SettingsPage` via the nested `<Route element={<Layout />}>` block in `App.tsx`.
-- `WarRoom` renders its own chrome (the top bar is a commented-out placeholder)
-  because it is the core screen with its own three-zone layout.
+- **`TopNavBar`** — barre supérieure fixe avec les liens Tableau de bord / Historique / Mémoire plus les enfants du côté droit (paramètres, avatar). Utilisée par `RefinementHome`, `HistoryPage` et `ProductMemoryPage` (la prop `active` surligne l'onglet courant).
+- **`Layout`** — coque à barre latérale avec les liens Raffinement / Historique / Mémoire / Paramètres / Santé et le sélecteur de langue. Utilisée par `SessionResultPage` et `SettingsPage` via le bloc imbriqué `<Route element={<Layout />}>` dans `App.tsx`.
+- `WarRoom` rend son propre habillage (la barre supérieure est un espace réservé commenté) car c'est l'écran principal avec sa propre mise en page à trois zones.
 
-## War Room (the core screen)
+## War Room (l'écran principal)
 
-`WarRoom.tsx` renders three zones from `SessionDetailResponse`:
+`WarRoom.tsx` affiche trois zones à partir de `SessionDetailResponse` :
 
-- **Intent Structure** (left) — the theme tree with per-question answered/total
-  progress. Theme grouping is derived client-side from the free-string
-  `question.theme` via `themeKey()` — the same grouping axis the backend uses for
-  Brief sections, so renaming an axis label must update both sides.
-- **Decision War Room** (center) — the conversation: one question at a time with
-  one-click `suggestions` chips, chronological ordering for the open round
-  (`openRoundOrder` keeps answered exchanges first, then the active question, then
-  pending axis questions in server order), per-round dividers, and local answer
-  state until the round is submitted via `POST /answers`.
-- **Deliverable** (right) — live Brief / Plan / Code Draft preview tabs and the
-  Markdown export link; when a `decisionReport` exists, `DecisionReportView`
-  renders the verdict banner with root cause / blockers / next action (see
-  [decision-report.md](../domain/decision-report.md)).
-- **Memory banner (round-0 pre-flight)** — when the session is scoped to a
-  product, the injected facts appear in a collapsible `MemoryBanner` above the
-  first question. Correcting or removing a line **writes straight to the product
-  memory** via `updateMemoryFact` / `archiveMemoryFact` — never to a local copy —
-  because that feedback loop is what keeps memory trustworthy over time.
+- **Structure d'intention** (gauche) — l'arborescence des thèmes avec la progression réponses/total par question. Le regroupement des thèmes est dérivé côté client à partir de la chaîne libre `question.theme` via `themeKey()` — le même axe de regroupement que le backend utilise pour les sections Brief, donc renommer un libellé d'axe doit mettre à jour les deux côtés.
+- **Decision War Room** (centre) — la conversation : une question à la fois avec des chips `suggestions` en un clic, un ordre chronologique pour le tour ouvert (`openRoundOrder` place d'abord les échanges répondus, puis la question active, puis les questions d'axes en attente dans l'ordre du serveur), des séparateurs par tour, et un état local des réponses jusqu'à la soumission du tour via `POST /answers`.
+- **Livrable** (droite) — onglets d'aperçu en direct Brief / Plan / Brouillon de code et le lien d'exportation Markdown ; lorsqu'un `decisionReport` existe, `DecisionReportView` affiche la bannière de verdict avec la cause racine / les bloqueurs / la prochaine action (voir [decision-report.md](../domain/decision-report.md)).
+- **Bannière mémoire (pré-vol du tour 0)** — lorsque la session est ciblée sur un produit, les faits injectés apparaissent dans une `MemoryBanner` repliable au-dessus de la première question. Corriger ou supprimer une ligne **écrit directement dans la mémoire produit** via `updateMemoryFact` / `archiveMemoryFact` — jamais dans une copie locale — car c'est cette boucle de rétroaction qui maintient la fiabilité de la mémoire au fil du temps.
 
-It also owns: grid change (posts `/mode`, which resets rounds server-side),
-`degraded` banner when the backend used the offline engine, and the clarity score
-derived from `confidence` (`clarityFromConfidence`: high 85, medium 68, low 40, 100
-with a final deliverable).
+Il gère également : le changement de grille (envoie une requête POST vers `/mode`, ce qui réinitialise les tours côté serveur), la bannière `degraded` lorsque le backend a utilisé le moteur hors ligne, et le score de clarté dérivé de `confidence` (`clarityFromConfidence` : élevé 85, moyen 68, faible 40, 100 avec un livrable final).
 
-## Home, history, memory, result and settings pages
+## Pages d'accueil, d'historique, de mémoire, de résultat et de paramètres
 
-- `RefinementHome` — objective textarea plus a **product scope selector** that
-  decides which memory feeds the session: the picker lists the user's products
-  (with active fact counts), offers a `__new__` sentinel option that creates a
-  product by name at session start, and an empty choice means "session without
-  memory". A `listProducts` failure never blocks starting a session (comment in
-  `RefinementHome.tsx`).
-- `ProductMemoryPage` — the curation surface at `/memory` (see
-  [product-memory.md](../domain/product-memory.md)): product list with fact
-  counts, facts grouped by category in the display order that mirrors
-  `MEMORY_CATEGORIES` (`src/models/product_memory.py`), inline add / edit /
-  confirm / archive, and the 40-fact cap surfaced in the UI
-  (`FACT_LIMIT` mirrors `MEMORY_FACT_LIMIT`).
-- `HistoryPage` — paginated list (20/page) with debounced search, status filter,
-  inline rename, delete confirmation, and re-export; "load more" appends instead of
-  resetting the page.
-- `SessionResultPage` — read-only view of the final deliverable.
-- `SettingsPage` — provider-aware form: required fields per provider
-  (`LLM_FIELDS_BY_PROVIDER`: mock none, deepseek model, azure endpoints +
-  deployment, openai/openrouter model), masked key hint, connection test result
-  panel. The API key field is only sent when non-empty (server keeps the stored
-  key), matching the backend rule in
-  [llm-configuration.md](../operations/llm-configuration.md).
+- `RefinementHome` — zone de texte d'objectif plus un **sélecteur de périmètre produit** qui décide quelle mémoire alimente la session : le sélecteur liste les produits de l'utilisateur (avec les compteurs de faits actifs), propose une option sentinelle `__new__` qui crée un produit par son nom au début de la session, et un choix vide signifie « session sans mémoire ». Un échec de `listProducts` ne bloque jamais le démarrage d'une session (commentaire dans `RefinementHome.tsx`).
+- `ProductMemoryPage` — la surface de curation à `/memory` (voir [product-memory.md](../domain/product-memory.md)) : liste des produits avec les compteurs de faits, faits groupés par catégorie dans l'ordre d'affichage qui reflète `MEMORY_CATEGORIES` (`src/models/product_memory.py`), ajout / modification / confirmation / archivage en ligne, et la limite de 40 faits exposée dans l'interface (`FACT_LIMIT` reflète `MEMORY_FACT_LIMIT`).
+- `HistoryPage` — liste paginée (20/page) avec recherche avec debounce, filtre par statut, renommage en ligne, confirmation de suppression et ré-exportation ; « charger plus » ajoute au lieu de réinitialiser la page.
+- `SessionResultPage` — vue en lecture seule du livrable final.
+- `SettingsPage` — formulaire adapté au fournisseur : champs obligatoires selon le fournisseur (`LLM_FIELDS_BY_PROVIDER` : mock aucun, deepseek modèle, azure points de terminaison + déploiement, openai/openrouter modèle), indication de clé masquée, panneau de résultat du test de connexion. Le champ de clé API n'est envoyé que s'il n'est pas vide (le serveur conserve la clé stockée), conformément à la règle du backend dans [llm-configuration.md](../operations/llm-configuration.md).
 
-## API client and types
+## Client API et types
 
-- `frontend/src/api/client.ts` — `apiFetch` wrapper: JSON headers, error extraction
-  from `detail` / `message` / `error.message` into an `ApiError` with status.
-- `frontend/src/api/refinement.ts` — typed functions for every refinement endpoint
-  (`createSession`, `listSessions`, `renameSession`, `deleteSession`, `getSession`,
-  `setSessionMode`, `submitAnswers`, `exportUrl`).
-- `frontend/src/api/memory.ts` — typed functions for products and facts
-  (`listProducts`, `createProduct`, `deleteProduct`, `getProductMemory`,
-  `addMemoryFact`, `updateMemoryFact`, `archiveMemoryFact`), backing the
-  `ProductMemoryPage` UI, the War Room memory banner, and the home product
-  picker.
+- `frontend/src/api/client.ts` — enveloppe `apiFetch` : en-têtes JSON, extraction des erreurs depuis `detail` / `message` / `error.message` dans une `ApiError` avec statut.
+- `frontend/src/api/refinement.ts` — fonctions typées pour chaque point de terminaison du raffinement (`createSession`, `listSessions`, `renameSession`, `deleteSession`, `getSession`, `setSessionMode`, `submitAnswers`, `exportUrl`).
+- `frontend/src/api/memory.ts` — fonctions typées pour les produits et les faits (`listProducts`, `createProduct`, `deleteProduct`, `getProductMemory`, `addMemoryFact`, `updateMemoryFact`, `archiveMemoryFact`), alimentant l'interface `ProductMemoryPage`, la bannière mémoire de la War Room et le sélecteur de produit de l'accueil.
 - `frontend/src/api/settings.ts` — `getSettings`, `saveSettings`, `testLlm`.
-- `frontend/src/types/api.ts` — mirrors the backend Pydantic schemas 1:1 (with the
-  same comments); keep it in sync with `src/api/schemas_refinement.py` and
-  `src/api/schemas_settings.py` when schemas change.
+- `frontend/src/types/api.ts` — reflète les schémas Pydantic du backend 1:1 (avec les mêmes commentaires) ; maintenez-le en synchronisation avec `src/api/schemas_refinement.py` et `src/api/schemas_settings.py` lorsque les schémas changent.
 
 ## i18n
 
-- `frontend/src/i18n/catalog.ts` — the UI catalog (`key -> [english, french]`,
-  default French), including the `lang` cookie name `lang`, the `nav.*` link
-  labels (dashboard / history / memory), and the whole `memory.*` namespace used
-  by the home product picker, the War Room banner and `ProductMemoryPage`.
-- `frontend/src/i18n/index.tsx` — `LanguageProvider` reads the `lang` cookie or
-  `navigator.language`, and `setLang` **writes the same cookie the backend reads**
-  (path `/`, 1 year, SameSite=Lax) so API messages and prompt language follow the
-  UI without an extra round-trip. `t(key, params)` formats `{placeholders}`;
-  `label(prefix, value)` maps enum values through the catalog with raw fallback.
-- The backend keeps its own, smaller catalog for API messages in `src/i18n.py`
-  (see [architecture/overview.md](../architecture/overview.md)).
+- `frontend/src/i18n/catalog.ts` — le catalogue de l'interface (`key -> [english, french]`, français par défaut), incluant le nom du cookie `lang`, les libellés des liens `nav.*` (tableau de bord / historique / mémoire), et tout l'espace de noms `memory.*` utilisé par le sélecteur de produit de l'accueil, la bannière de la War Room et `ProductMemoryPage`.
+- `frontend/src/i18n/index.tsx` — `LanguageProvider` lit le cookie `lang` ou `navigator.language`, et `setLang` **écrit le même cookie que lit le backend** (chemin `/`, 1 an, SameSite=Lax) afin que les messages de l'API et la langue des prompts suivent l'interface sans aller-retour supplémentaire. `t(key, params)` formate les `{placeholders}` ; `label(prefix, value)` mappe les valeurs d'énumération via le catalogue avec repli sur la valeur brute.
+- Le backend conserve son propre catalogue, plus petit, pour les messages de l'API dans `src/i18n.py` (voir [architecture/overview.md](../architecture/overview.md)).
 
-## Change guidance
+## Guide de modification
 
-- **When to consult this page:** any UI change, route addition, i18n string, or
-  type/schema sync work.
-- **Invariants to preserve:** SPA never calls an LLM; single-origin routing
-  (Vite/nginx proxy for `/api` and `/health`); `lang` cookie shared with the
-  backend; theme-grouping derivation identical to backend brief grouping.
-- **Extension seams:** new page -> add route in `App.tsx`; new endpoint -> add
-  typed function in `api/refinement.ts`, `api/memory.ts` or `api/settings.ts`
-  plus types in `types/api.ts`; new UI string -> add the `[en, fr]` pair in
-  `catalog.ts` (never a hardcoded user-facing string).
-- **Testing:** there is **no frontend test suite**; the enforced checks are
-  `tsc --noEmit` and `vite build`, both behind `npm run build`. Adding a component
-  test setup would be a new toolchain decision, not an incremental fix.
-- **Validation:** `cd frontend && npm run build` (typecheck + production build);
-  for interactive work `npm run dev` with the backend running.
+- **Quand consulter cette page :** tout changement d'interface, ajout de route, chaîne i18n, ou travail de synchronisation des types/schémas.
+- **Invariants à préserver :** la SPA n'appelle jamais un LLM ; routage mono-origine (proxy Vite/nginx pour `/api` et `/health`) ; cookie `lang` partagé avec le backend ; dérivation du groupement des thèmes identique au groupement des briefs du backend.
+- **Points d'extension :** nouvelle page -> ajouter une route dans `App.tsx` ; nouveau point de terminaison -> ajouter une fonction typée dans `api/refinement.ts`, `api/memory.ts` ou `api/settings.ts` ainsi que les types dans `types/api.ts` ; nouvelle chaîne d'interface -> ajouter la paire `[en, fr]` dans `catalog.ts` (jamais de chaîne codée en dur visible par l'utilisateur).
+- **Tests :** il n'existe **aucune suite de tests frontend** ; les vérifications imposées sont `tsc --noEmit` et `vite build`, toutes deux derrière `npm run build`. Ajouter une configuration de tests de composants serait une nouvelle décision d'outillage, pas un correctif incrémental.
+- **Validation :** `cd frontend && npm run build` (vérification des types + build de production) ; pour le travail interactif, `npm run dev` avec le backend en cours d'exécution.

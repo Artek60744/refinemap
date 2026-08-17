@@ -1,7 +1,7 @@
 ---
 type: Architecture
-title: RefineMap — System Architecture Overview
-description: High-level architecture of RefineMap, the decision board for product and tech teams — React SPA, FastAPI backend, LangGraph refinement engine, SQLAlchemy/PostgreSQL persistence, pluggable LLM providers, and the request flow through a session.
+title: RefineMap — Vue d'ensemble de l'architecture système
+description: Architecture de haut niveau de RefineMap, le tableau de décision pour les équipes produit et tech — SPA React, backend FastAPI, moteur de raffinement LangGraph, persistance SQLAlchemy/PostgreSQL, fournisseurs de LLM interchangeables et flux de requête à travers une session.
 tags: [architecture, overview, fastapi, react, langgraph]
 openwiki:
   roles: [architecture]
@@ -12,15 +12,11 @@ openwiki:
   validation_commands: [python -m pytest tests/ -q]
 ---
 
-# RefineMap — System Architecture Overview
+# RefineMap — Vue d'ensemble de l'architecture système
 
-RefineMap is a decision board for product & tech teams: it turns a fuzzy brainstorm
-into an explicit, prioritized decision (Go / Explore / Rework / Drop) and an
-actionable deliverable (Brief / Plan / Code Draft) in a single session. The
-product rule — "the AI poses questions and helps converge; the decision stays the
-team's" — is enforced structurally by the engine, not just by prompts.
+RefineMap est un tableau de décision pour les équipes produit et tech : il transforme un brainstorming flou en une décision explicite et priorisée (Go / Explore / Rework / Drop) et en un livrable exploitable (Brief / Plan / Code Draft) en une seule session. La règle produit — « l'IA pose des questions et aide à converger ; la décision reste celle de l'équipe » — est appliquée structurellement par le moteur, pas seulement par les invites.
 
-## System context
+## Contexte système
 
 <!-- openwiki: mermaid parse failed and this diagram was converted to a text fence so it does not break rendering. Fix the diagram source and restore the mermaid fence. Parser error: Heuristic: an unescaped angle bracket inside a label breaks rendering; rephrase the label. -->
 ```text
@@ -33,14 +29,9 @@ flowchart LR
     LLM -->|"structured JSON"| LG
 ```
 
-The SPA only ever talks JSON to the API (`/api/refinement/*`,
-`/api/products*`, `/api/memory*`, `/api/settings`, `/health`); it never holds an
-LLM credential or makes an AI call. The backend owns orchestration, persistence,
-and secrets. In production, nginx serves the built SPA and reverse-proxies the API
-on the same origin, so there is no CORS (see
-[operations/deployment.md](../operations/deployment.md)).
+La SPA ne communique avec l'API qu'en JSON (`/api/refinement/*`, `/api/products*`, `/api/memory*`, `/api/settings`, `/health`) ; elle ne détient jamais d'identifiants LLM et n'effectue aucun appel IA. Le backend détient l'orchestration, la persistance et les secrets. En production, nginx sert la SPA compilée et fait office de reverse proxy pour l'API sur la même origine, donc pas de CORS (voir [operations/deployment.md](../operations/deployment.md)).
 
-## Request flow through one session
+## Flux de requête lors d'une session
 
 ```mermaid
 sequenceDiagram
@@ -74,47 +65,31 @@ sequenceDiagram
     API-->>SPA: Markdown deliverable (Decision + Brief + Plan)
 ```
 
-## Components and their homes
+## Composants et leur emplacement
 
-| Component | Home | Responsibility |
+| Composant | Emplacement | Responsabilité |
 |---|---|---|
-| API entry | `src/main.py` | FastAPI app, `lifespan` runs `init_db()`, raw-ASGI `LanguageMiddleware` sets the language ContextVar per request, `/health` returns provider status |
-| Settings | `src/config/settings.py` | Pydantic-settings env config: DB URL, LLM provider/keys, refinement limits (`refinement_max_rounds=3`, `min_rounds=2`, `max_questions_per_round=6`), `app_root`/`prompts_dir` |
-| Database | `src/database.py` | SQLAlchemy engine/session, `get_db` dependency, `init_db` (create_all + hand-rolled forward migration + default user seed) |
-| Refinement engine | `src/agents/refinement_workflow/` | LangGraph state machine — see [refinement-engine.md](refinement-engine.md) |
-| Services | `src/services/` | `refinement_service` (orchestration), `refinement_llm` (engines), `settings_service`, `product_memory_service`, `question_grids`, `product_memory_rules`, `artifact_renderer`, `prompt_loader` |
-| Repositories | `src/repositories/` | SQLAlchemy data access for sessions, product memory, settings |
-| Models | `src/models/` | ORM entities — see [data-model.md](../domain/data-model.md) |
-| API routers | `src/api/` | `/api/refinement`, `/api/products`, `/api/memory`, `/api/settings` — see [refinement-api.md](../api/refinement-api.md) |
-| Frontend | `frontend/src/` | React SPA — see [frontend/overview.md](../frontend/overview.md) |
-| Prompts | `prompts/` | Six Markdown prompts, versioned per session (`prompt_version`) |
-| Contracts | `contracts/` | JSON Schemas for LLM outputs + a historical API contract doc |
+| Point d'entrée API | `src/main.py` | Application FastAPI, `lifespan` exécute `init_db()`, `LanguageMiddleware` ASGI brut définit la ContextVar de langue par requête, `/health` renvoie le statut du fournisseur |
+| Paramètres | `src/config/settings.py` | Configuration d'environnement Pydantic-settings : URL de base de données, fournisseur/clés LLM, limites de raffinement (`refinement_max_rounds=3`, `min_rounds=2`, `max_questions_per_round=6`), `app_root`/`prompts_dir` |
+| Base de données | `src/database.py` | Moteur/session SQLAlchemy, dépendance `get_db`, `init_db` (create_all + migration ascendante écrite à la main + seed d'utilisateur par défaut) |
+| Moteur de raffinement | `src/agents/refinement_workflow/` | Machine à états LangGraph — voir [refinement-engine.md](refinement-engine.md) |
+| Services | `src/services/` | `refinement_service` (orchestration), `refinement_llm` (moteurs), `settings_service`, `product_memory_service`, `question_grids`, `product_memory_rules`, `artifact_renderer`, `prompt_loader` |
+| Dépôts | `src/repositories/` | Accès aux données SQLAlchemy pour les sessions, la mémoire produit et les paramètres |
+| Modèles | `src/models/` | Entités ORM — voir [data-model.md](../domain/data-model.md) |
+| Routeurs API | `src/api/` | `/api/refinement`, `/api/products`, `/api/memory`, `/api/settings` — voir [refinement-api.md](../api/refinement-api.md) |
+| Frontend | `frontend/src/` | SPA React — voir [frontend/overview.md](../frontend/overview.md) |
+| Invites | `prompts/` | Six invites Markdown, versionnées par session (`prompt_version`) |
+| Contrats | `contracts/` | Schémas JSON pour les sorties LLM + un document de contrat API historique |
 
-## Cross-cutting concerns
+## Aspects transverses
 
-- **Language / i18n** — the `lang` cookie is the single switch: the frontend catalog
-  (`frontend/src/i18n/catalog.ts`) and the backend catalog (`src/i18n.py`, only
-  `api.*` namespaces) both read it; the middleware picks it once per request
-  (raw ASGI on purpose — `BaseHTTPMiddleware` runs the endpoint in a separate task
-  and makes ContextVar propagation fragile), and the prompt language is resolved
-  from the same ContextVar so LLM user-facing strings follow the UI.
-- **State alignment** — LangGraph `thread_id` = session id keeps checkpoints
-  aligned with the business entity, while PostgreSQL remains the source of truth;
-  the graph is rebuilt per request from repository data (`_build_state_from_session`).
-- **Degradation** — any real LLM failure degrades to the deterministic offline mock
-  with `degraded: true` surfaced to the UI, never a 500.
-- **Security posture** — no authentication (single seeded local user), secrets
-  encrypted at rest, no HTTPS yet; see
-  [operations/deployment.md](../operations/deployment.md) for the full list.
+- **Langue / i18n** — le cookie `lang` est l'interrupteur unique : le catalogue frontend (`frontend/src/i18n/catalog.ts`) et le catalogue backend (`src/i18n.py`, uniquement les espaces de noms `api.*`) le lisent tous deux ; le middleware le sélectionne une fois par requête (ASGI brut volontairement — `BaseHTTPMiddleware` exécute l'endpoint dans une tâche séparée et rend la propagation de ContextVar fragile), et la langue des invites est résolue à partir de la même ContextVar afin que les chaînes LLM visibles par l'utilisateur suivent l'interface.
+- **Alignement d'état** — `thread_id` de LangGraph = identifiant de session maintient les points de contrôle alignés sur l'entité métier, tandis que PostgreSQL reste la source de vérité ; le graphe est reconstruit à chaque requête à partir des données du dépôt (`_build_state_from_session`).
+- **Dégradation** — toute défaillance réelle du LLM se dégrade vers le mock hors ligne déterministe avec `degraded: true` remonté à l'interface, jamais une 500.
+- **Posture de sécurité** — pas d'authentification (un seul utilisateur local initialisé), secrets chiffrés au repos, pas encore de HTTPS ; voir [operations/deployment.md](../operations/deployment.md) pour la liste complète.
 
-## Change guidance
+## Guide des modifications
 
-- **When to consult this page:** understanding how a change ripples across the
-  system before touching code; adding middleware, lifecycle hooks, or new routers.
-- **Entry points for a backend change:** register the router in `src/main.py`;
-  add the route in `src/api/`, the logic in `src/services/`, the data access in
-  `src/repositories/`, the schema in `src/api/schemas_*.py`, and mirror consumer
-  types in `frontend/src/types/api.ts`.
-- **Validation:** `python -m pytest tests/ -q` for the backend units, then a manual
-  mock-provider flow (`uvicorn src.main:app --reload --port 8000`); frontend-only
-  changes validate with `cd frontend && npm run build`.
+- **Quand consulter cette page :** comprendre comment une modification se répercute dans tout le système avant de toucher au code ; ajout de middleware, de hooks de cycle de vie ou de nouveaux routeurs.
+- **Points d'entrée pour une modification backend :** enregistrer le routeur dans `src/main.py` ; ajouter la route dans `src/api/`, la logique dans `src/services/`, l'accès aux données dans `src/repositories/`, le schéma dans `src/api/schemas_*.py`, et refléter les types consommateur dans `frontend/src/types/api.ts`.
+- **Validation :** `python -m pytest tests/ -q` pour les tests unitaires backend, puis un flux manuel avec le fournisseur mock (`uvicorn src.main:app --reload --port 8000`) ; les modifications frontend uniquement se valident avec `cd frontend && npm run build`.
