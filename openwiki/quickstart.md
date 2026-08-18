@@ -35,7 +35,7 @@ Le dépôt est une application en deux parties :
 | Configuration des fournisseurs LLM | [operations/llm-configuration.md](operations/llm-configuration.md) | Stockage des paramètres, chiffrement, fournisseurs, test de connexion |
 | Tests et validation | [testing.md](testing.md) | Suites de tests, assertions exactes, commandes de validation minimales |
 
-Le [README.md](../README.md) à la racine du dépôt est la présentation du produit et le guide de démarrage rapide du développement local ; `docs/` contient les documents de conception et de planification (parcours du workflow, guide de déploiement, modèle de données cible, note de conception de la mémoire produit `docs/product-memory.md`, plan du MVP) que ce wiki résume et référence au lieu de les dupliquer.
+Le [README.md](../README.md) à la racine du dépôt est la présentation du produit et le guide de démarrage rapide du développement local ; `docs/` contient les documents de planification et de recherche (`implementation-plan.md` — plan MVP 6 semaines, `mvp-blueprint.md` — scope, persona et principes d'architecture, `perplexity.md` — recherche de marché, `exemple_text.md` — exemple de sujet) que ce wiki résume et référence au lieu de les dupliquer.
 
 ## Routage des tâches
 
@@ -91,14 +91,14 @@ Voir [testing.md](testing.md) pour ce que chaque suite vérifie et pourquoi.
 
 ## Garder ce wiki à jour
 
-Ce wiki est généré et maintenu par OpenWiki ; la CLI est une devDependency racine (`package.json`, README « Documentation temps réel (OpenWiki) ») : `npm run docs:update` le régénère, `npm run docs:watch` exécute `scripts/openwiki-watch.mjs` (surveille `src/`, `frontend/src/` et `contracts/`, avec un délai de 8 s), et `npm run docs:visualize` ouvre le graphe de connaissances. Les pages du wiki vivent dans `openwiki/` et sont validées avec le code — mettez-les à jour dans le même changement que le code source qu’elles décrivent.
+Ce wiki est généré et maintenu par OpenWiki ; la CLI est une devDependency racine (`package.json`, README « Documentation temps réel (OpenWiki) ») : `npm run docs:init` amorce le CLI, `npm run docs:update` régénère le wiki (one-shot, `--language fr`), `npm run docs:watch` exécute `scripts/openwiki-watch.mjs` (surveille `src/` et `frontend/src/`, debounce 8 s), et `npm run docs:visualize` ouvre le graphe de connaissances. Une workflow CI (`openwiki-docs.yml`, voir README) régénère la doc à chaque push sur `dev` ; OpenWiki maintient aussi un bloc `OPENWIKI:START/END` dans `AGENTS.md` et `CLAUDE.md` qui pointe les agents vers ce wiki, et `Dockerfile.openwiki` fournit un conteneur qui exécute `docs:watch`. Les pages du wiki vivent dans `openwiki/` et sont validées avec le code — mettez-les à jour dans le même changement que le code source qu’elles décrivent.
 
 ## Backlog
 
 - **Authentification (lien magique / Google SSO)** — prévue (README « Prochains incréments techniques », `docs/implementation-plan.md` semaine 2) mais aucun code n’existe ; aujourd’hui, un seul utilisateur local est initialisé (`local-user@example.com`, voir `src/database.py::init_db`).
 - **Migrations Alembic** — `alembic` figure dans `requirements.txt` mais aucune configuration de migration n’existe ; le schéma est créé par `create_all()` plus une migration forward écrite à la main `_add_missing_columns()` dans `src/database.py`.
-- **Domaine du tableau de décision (workspace / board / node / score / vote / tables d’export)** — modèle cible uniquement, décrit dans `docs/sqlalchemy-data-model.md` ; le schéma actuel est centré sur les sessions.
+- **Domaine du tableau de décision (workspace / board / node / score / vote / tables d’export)** — modèle cible uniquement : le README (« Prochains incréments techniques ») et `docs/implementation-plan.md` (semaine 2) décrivent la cible, et le README pointe vers [domain/data-model.md](domain/data-model.md) comme référence du modèle ; le schéma actuel reste centré sur les sessions.
 - **Exports du backlog (CSV / JSON)** — seul l’export Markdown est implémenté (`GET /api/refinement/sessions/{id}/export`).
 - **Interface de score / vote / tags et couche de décision** — prévu, non implémenté (README ; `docs/mvp-blueprint.md`).
 - **Suite de tests frontend** — aucune n’existe ; la validation frontend est `tsc --noEmit` + `vite build`.
-- **Durcissement HTTPS et authentification réelle** — limites documentées dans `docs/deployment.md` et [operations/deployment.md](operations/deployment.md).
+- **Durcissement HTTPS et authentification réelle** — limites documentées dans [operations/deployment.md](operations/deployment.md).

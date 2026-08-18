@@ -14,7 +14,7 @@ openwiki:
 
 # Déploiement, Docker et la VM Azure
 
-L'application s'exécute dans des conteneurs Docker sur une VM Azure, et toutes les opérations passent par `./deploy.sh` à la racine du dépôt. Le guide opérationnel complet se trouve dans `docs/deployment.md` ; cette page reprend les faits durables et les règles de sécurité des changements.
+L'application s'exécute dans des conteneurs Docker sur une VM Azure, et toutes les opérations passent par `./deploy.sh` à la racine du dépôt (le `usage` du script liste toutes les sous-commandes). Cette page est le guide opérationnel : elle reprend les faits durables et les règles de sécurité des changements.
 
 **URL de production :** http://203.0.113.10/ (pas de HTTPS — voir les limites ci-dessous).
 
@@ -60,7 +60,7 @@ Valeurs par défaut (surchargeables via l'environnement ou un `deploy.env` local
 
 VM Standard_B2s (2 vCPU, 4 Go, Ubuntu 22.04) dans France Central ≈ 30 €/mois en fonctionnement continu sur un crédit d'environ 50 €/mois ; `./deploy.sh stop` pendant les nuits et les week-ends divise approximativement ce montant par trois. Le disque (~4 €/mois) et l'IP publique (~3 €/mois) sont facturés même à l'arrêt.
 
-## Limites connues (documentées dans `docs/deployment.md`)
+## Limites connues
 
 - **Pas de HTTPS** — trafic en clair ; acceptable pour un outil de test interne, à corriger (Caddy + Let's Encrypt + domaine) avant toute utilisation réelle.
 - **Pas d'authentification** — toute personne disposant de l'IP accède à l'application et à la page des paramètres.
@@ -72,4 +72,4 @@ VM Standard_B2s (2 vCPU, 4 Go, Ubuntu 22.04) dans France Central ≈ 30 €/mois
 
 - **Quand consulter cette page :** lors de modifications de la configuration Docker, de la config nginx, des ressources VM, ou lors d'un déploiement.
 - **Invariants à préserver :** exclusion du `.env` des transferts ; sémantique du marqueur `.dev-mode` ; distinction `deploy` vs `sync` (les fichiers de construction nécessitent `deploy`) ; `proxy_read_timeout` reste élevé pour les cycles LLM synchrones ; conserver le fallback SPA et les règles de cache `/assets/` dans nginx.
-- **Validation :** `./deploy.sh status` et `./deploy.sh health` après chaque changement ; test de fumée Docker local `docker compose up --build` avant de toucher à la VM.
+- **Validation :** `./deploy.sh status` et `./deploy.sh health` après chaque changement ; test de fumée Docker local `docker compose up --build` avant de toucher à la VM. local `docker compose up --build` avant de toucher à la VM.

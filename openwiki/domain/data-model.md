@@ -14,7 +14,7 @@ openwiki:
 
 # Modèle de données et cycle de vie des sessions
 
-PostgreSQL est la source de vérité en production (SQLite en local) ; les checkpoints LangGraph ne sont jamais le seul dépôt des réponses ou des sorties. Le modèle est aujourd’hui centré sur la session — le domaine decision-board (workspace / board / node / score / export) décrit dans `docs/sqlalchemy-data-model.md` est l’objectif visé, pas encore implémenté.
+PostgreSQL est la source de vérité en production (SQLite en local) ; les checkpoints LangGraph ne sont jamais le seul dépôt des réponses ou des sorties. Le modèle est aujourd’hui centré sur la session — le domaine decision-board (workspace / board / node / score / export), décrit comme cible dans `docs/implementation-plan.md` (semaine 2) et `docs/mvp-blueprint.md`, reste l’objectif visé, pas encore implémenté (le README le suit sous « Prochains incréments techniques » et renvoie à cette page comme référence du modèle cible).
 
 ## Entités (`src/models/refinement.py`)
 
