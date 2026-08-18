@@ -204,7 +204,7 @@ tables, pas dans chaque transition du graphe.
 
 ## 9. Modèle de persistance
 
-Voir `docs/sqlalchemy-data-model.md` pour le modèle relationnel cible. Tables clés :
+Voir `openwiki/domain/data-model.md` pour le modèle relationnel cible. Tables clés :
 `workspaces`, `boards`, `nodes`, `node_refinements`, `scores`, `votes`, `exports`.
 
 ## 10. Modèle d'interaction LLM
@@ -222,9 +222,9 @@ La boucle LLM ne rejoue pas un transcript brut à chaque appel. Trois couches :
 3. `generate-deliverable`
 
 Toutes les sorties doivent être du JSON strict, validé contre les schémas de
-`contracts/`, parsé par des modèles Pydantic avant persistance.
+`src/contracts/`, parsé par des modèles Pydantic avant persistance.
 
-> Note : les schémas de `contracts/` reflètent encore l'API du POC de refinement de
+> Note : les schémas de `src/contracts/` reflètent encore l'API du POC de refinement de
 > tickets et devront évoluer avec le code vers le domaine board.
 
 ## 11. Sécurité et accès

@@ -2,7 +2,7 @@ import { watch } from "node:fs/promises";
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 
-const watchedDirs = ["src", "frontend/src", "contracts"].filter((d) =>
+const watchedDirs = ["src", "frontend/src"].filter((d) =>
   existsSync(d),
 );
 
