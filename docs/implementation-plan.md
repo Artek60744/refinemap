@@ -40,7 +40,7 @@ qui permet de démarrer en moins de 2 minutes.
 - auth simple (magic link ou Google) + appartenance workspace
 - création workspace + board
 - modèle de données minimal : `workspace`, `user`, `board`, `node`, `score`, `export`
-  (voir `docs/sqlalchemy-data-model.md`)
+  (voir `openwiki/domain/data-model.md`)
 - UI board en arborescence simple (semi-map), même sans temps réel avancé
 - starter templates : feature idea, product opportunity, technical initiative
 
@@ -142,7 +142,7 @@ On mesure la **complétion du workflow**, pas le nombre de clics ou d'inscriptio
   (`src/config/settings.py`), abstraction LLM (`src/services/refinement_llm.py`),
   chargement de prompts, SPA React et i18n.
 - **À réorienter** : graphe LangGraph (`src/agents/refinement_workflow/`) vers le nœud
-  d'idée ; schémas Pydantic (`src/api/schemas_refinement.py`) ; contrats de `contracts/`.
+  d'idée ; schémas Pydantic (`src/api/schemas_refinement.py`) ; contrats de `src/contracts/`.
 - **À retirer** : `src/services/azure_devops_refinement.py`, les tables
   `work_item_snapshots` et les champs ADO de `refinement_sessions`, les écrans de
   sélection de work item.

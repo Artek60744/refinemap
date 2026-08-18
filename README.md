@@ -98,7 +98,7 @@ Les entités du produit tournent autour du board de décision :
 - **score** — impact / effort / risque / confiance sur un nœud
 - **export** — un livrable généré (brief, backlog, note de cadrage)
 
-Voir `docs/sqlalchemy-data-model.md` pour le modèle relationnel cible.
+Voir `openwiki/domain/data-model.md` pour le modèle relationnel cible.
 
 ## Lancer en local (dev)
 
@@ -144,7 +144,7 @@ L'application est déployée sur une VM Azure et mise à jour avec `./deploy.sh`
 ```
 
 En ligne sur <http://203.0.113.10/>.
-Voir `docs/deployment.md` pour le guide complet, y compris le contrôle des coûts et
+Voir `openwiki/operations/deployment.md` pour le guide complet, y compris le contrôle des coûts et
 les limites de sécurité actuelles.
 
 ## Documentation temps réel (OpenWiki)
@@ -158,7 +158,7 @@ La doc se met à jour automatiquement à chaque changement de code.
 npm install            # une fois : installe le CLI (devDependency)
 npm run docs:init      # première génération interactive (provider / clé / modèle)
 npm run docs:update    # régénérer la doc (one-shot, non interactif, en français)
-npm run docs:watch     # temps réel : surveille src/, frontend/src/, contracts/
+npm run docs:watch     # temps réel : surveille src/, frontend/src/
                        # et met à jour la doc à chaque changement (debounce 8 s)
 npm run docs:visualize # graphe de connaissances interactif (127.0.0.1:4321)
 ```
@@ -167,14 +167,9 @@ npm run docs:visualize # graphe de connaissances interactif (127.0.0.1:4321)
 - OpenWiki maintient `AGENTS.md` et `CLAUDE.md` (bloc `OPENWIKI:START/END`) pour
   pointer les agents vers le wiki.
 - Le périmètre lu par la doc est contrôlé par `.openwikiignore`.
-
-### Watcher dans le compose dev
-
-Le stack dev (`docker compose -f docker-compose.yml -f docker-compose.dev.yml up`)
-lance aussi un service `openwiki` qui surveille `src/`, `frontend/src/` et
-`contracts/` et régénère la doc en parallèle pendant que vous codez. Il lit
-`DEEPSEEK_API_KEY`, `DEEPSEEK_ENDPOINT` et `DEEPSEEK_MODEL` depuis le `.env` du
-repo. Logs : `docker compose logs -f openwiki`.
+- La CI GitHub Actions (`openwiki-docs.yml`) régénère la doc à chaque push sur
+  `dev`. En local, `npm run docs:watch` reste dispo en opt-in pour les branches
+  de feature.
 
 ### Configurer DeepSeek
 
@@ -206,7 +201,7 @@ reprendre `DEEPSEEK_API_KEY` et `DEEPSEEK_MODEL` depuis le `.env` du repo.
 
 1. remplacer le LLM mock par un vrai client fournisseur
 2. faire converger le modèle de données actuel vers le domaine board (voir
-   `docs/sqlalchemy-data-model.md`)
+   `openwiki/domain/data-model.md`)
 3. remplacer le bootstrap `create_all()` par des migrations Alembic
 4. ajouter l'authentification (magic link / Google) et l'appartenance workspace
 5. ajouter la couche décisionnelle (scoring, vote, tags) et les exports
