@@ -16,7 +16,11 @@ openwiki:
 
 L'application s'exécute dans des conteneurs Docker sur une VM Azure, et toutes les opérations passent par `./deploy.sh` à la racine du dépôt (le `usage` du script liste toutes les sous-commandes). Cette page est le guide opérationnel : elle reprend les faits durables et les règles de sécurité des changements.
 
-**URL de production :** http://203.0.113.10/ (pas de HTTPS — voir les limites ci-dessous).
+**Il n'y a plus de déploiement de référence.** L'ancienne VM de démonstration a été
+supprimée : le produit est distribué comme outil local (CLI + application locale), pas
+comme service hébergé. Cette page reste le guide pour qui veut héberger sa propre
+instance — les identifiants de l'infrastructure cible se déclarent dans un `deploy.env`
+local et non tracké (voir `deploy.env.example`).
 
 ## Conteneurs
 
@@ -52,9 +56,9 @@ Autres commandes : `restart`, `down` (arrêt des conteneurs, base de données pr
 
 ## Transport et configuration
 
-Deux canaux, sélectionnés automatiquement : **SSH** (rsync, rapide, diffuse les journaux ; nécessite la clé et un port 22 ouvert) et **Azure Run Command API** (base64 de l'archive source dans l'appel API ; fonctionne depuis des réseaux bloqués mais prend 1 à 2 minutes par synchronisation et plafonne à ~200 Ko de charge utile — `DEPLOY_TRANSPORT=ssh` force le canal rapide). Le script transmet explicitement l'abonnement à chaque appel `az`, car le locataire l'entreprise ne cesse de réinitialiser l'abonnement CLI actif.
+Deux canaux, sélectionnés automatiquement : **SSH** (rsync, rapide, diffuse les journaux ; nécessite la clé et un port 22 ouvert) et **Azure Run Command API** (base64 de l'archive source dans l'appel API ; fonctionne depuis des réseaux bloqués mais prend 1 à 2 minutes par synchronisation et plafonne à ~200 Ko de charge utile — `DEPLOY_TRANSPORT=ssh` force le canal rapide). Le script transmet explicitement l'abonnement à chaque appel `az`, car certains locataires d'entreprise réinitialisent l'abonnement CLI actif.
 
-Valeurs par défaut (surchargeables via l'environnement ou un `deploy.env` local) : `AZ_SUBSCRIPTION=00000000-0000-0000-0000-000000000000`, `AZ_RESOURCE_GROUP=rg-example`, `AZ_VM_NAME=vm-example`, `AZ_VM_IP=203.0.113.10`, `AZ_VM_USER=azureuser`, `AZ_SSH_KEY=~/.ssh/deploy_key`, `AZ_REMOTE_DIR=/opt/refinement`, `DEPLOY_TRANSPORT=auto`.
+Aucune valeur par défaut n'est fournie : `deploy.sh` s'arrête s'il manque l'une des variables `AZ_SUBSCRIPTION`, `AZ_RESOURCE_GROUP`, `AZ_VM_NAME`, `AZ_VM_USER`, `AZ_VM_IP`, `AZ_SSH_KEY` ou `AZ_REMOTE_DIR`. Elles se déclarent dans un `deploy.env` local, non tracké — copier `deploy.env.example` pour démarrer. Seul `DEPLOY_TRANSPORT` a une valeur par défaut (`auto`).
 
 ## Contrôle des coûts
 

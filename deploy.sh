@@ -6,19 +6,23 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------- configuration
-# Every value can be overridden from the environment or from a local deploy.env.
-SUBSCRIPTION="${AZ_SUBSCRIPTION:-00000000-0000-0000-0000-000000000000}"
-RESOURCE_GROUP="${AZ_RESOURCE_GROUP:-rg-example}"
-VM_NAME="${AZ_VM_NAME:-vm-example}"
-VM_USER="${AZ_VM_USER:-azureuser}"
-VM_IP="${AZ_VM_IP:-203.0.113.10}"
-SSH_KEY="${AZ_SSH_KEY:-$HOME/.ssh/deploy_key}"
-REMOTE_DIR="${AZ_REMOTE_DIR:-/opt/refinement}"
-# ssh | az | auto — "auto" prefers ssh and silently falls back to the Azure API.
-TRANSPORT="${DEPLOY_TRANSPORT:-auto}"
-
+# Nothing about a specific Azure tenant is hardcoded here: this repo is public.
+# Every value comes from the environment or from a local, untracked deploy.env —
+# see deploy.env.example. deploy.env is sourced *before* the assignments below so
+# that it can set the AZ_* variables themselves, not just their derived names.
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$PROJECT_DIR/deploy.env" ]] && source "$PROJECT_DIR/deploy.env"
+
+_missing="missing — set it in deploy.env (see deploy.env.example)"
+SUBSCRIPTION="${AZ_SUBSCRIPTION:?AZ_SUBSCRIPTION $_missing}"
+RESOURCE_GROUP="${AZ_RESOURCE_GROUP:?AZ_RESOURCE_GROUP $_missing}"
+VM_NAME="${AZ_VM_NAME:?AZ_VM_NAME $_missing}"
+VM_USER="${AZ_VM_USER:?AZ_VM_USER $_missing}"
+VM_IP="${AZ_VM_IP:?AZ_VM_IP $_missing}"
+SSH_KEY="${AZ_SSH_KEY:?AZ_SSH_KEY $_missing}"
+REMOTE_DIR="${AZ_REMOTE_DIR:?AZ_REMOTE_DIR $_missing}"
+# ssh | az | auto — "auto" prefers ssh and silently falls back to the Azure API.
+TRANSPORT="${DEPLOY_TRANSPORT:-auto}"
 
 # Files that live only on the server. rsync --delete leaves excluded paths
 # alone, so listing them here is what stops a sync from wiping the server's

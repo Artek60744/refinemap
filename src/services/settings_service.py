@@ -16,6 +16,7 @@ from src.config.settings import settings
 from src.i18n import t
 from src.models.app_settings import SENSITIVE_SETTING_KEYS, SettingCategories, SettingKeys
 from src.repositories.settings_repository import SettingsRepository
+from src.services.refinement_llm import KEYLESS_PROVIDERS
 from src.utils.encryption import decrypt_value, encrypt_value
 
 
@@ -82,18 +83,35 @@ class SettingsService:
             key_fallback = settings.deepseek_api_key
             model_fallback = settings.deepseek_model
             endpoint_fallback = settings.deepseek_endpoint
+        elif provider == "ollama":
+            # Never inherit an Azure/OpenAI key here: that would ship a real
+            # credential to a local endpoint. Only an explicit LLM_API_KEY passes,
+            # for the rare local gateway that wants one.
+            key_fallback = ""
+            model_fallback = settings.ollama_model
+            endpoint_fallback = settings.ollama_endpoint
         else:
             key_fallback = settings.azure_ai_key or settings.openai_api_key
             model_fallback = settings.openai_model
             endpoint_fallback = settings.azure_ai_endpoint
 
+        # The generic LLM_* variables win over the provider-specific ones, and are
+        # themselves overridden by anything saved from the settings page.
         return RuntimeConfig(
             llm=LlmRuntimeConfig(
                 provider=provider,
-                endpoint=self._get_setting_value(SettingKeys.LLM_ENDPOINT, endpoint_fallback),
-                api_key=self._get_secret_value(SettingKeys.LLM_API_KEY, key_fallback),
-                deployment=self._get_setting_value(SettingKeys.LLM_DEPLOYMENT, settings.azure_ai_model_id),
-                model=self._get_setting_value(SettingKeys.LLM_MODEL, model_fallback),
+                endpoint=self._get_setting_value(
+                    SettingKeys.LLM_ENDPOINT, settings.llm_endpoint or endpoint_fallback
+                ),
+                api_key=self._get_secret_value(
+                    SettingKeys.LLM_API_KEY, settings.llm_api_key or key_fallback
+                ),
+                deployment=self._get_setting_value(
+                    SettingKeys.LLM_DEPLOYMENT, settings.llm_deployment or settings.azure_ai_model_id
+                ),
+                model=self._get_setting_value(
+                    SettingKeys.LLM_MODEL, settings.llm_model or model_fallback
+                ),
             ),
         )
 
@@ -112,15 +130,16 @@ class SettingsService:
                 details={"provider": provider},
             )
 
-        if provider in {"azure-foundry", "azure-openai", "openai", "openrouter", "deepseek"}:
+        if provider in {"azure-foundry", "azure-openai", "openai", "openrouter", "deepseek", "ollama"}:
             missing = []
-            if not api_key:
+            # A local runtime has no credentials to check — only a model to pick.
+            if not api_key and provider not in KEYLESS_PROVIDERS:
                 missing.append(t("api.field.api_key"))
             if provider in {"azure-foundry", "azure-openai"} and not endpoint:
                 missing.append(t("api.field.endpoint"))
             if provider in {"azure-foundry", "azure-openai"} and not deployment:
                 missing.append(t("api.field.deployment"))
-            if provider in {"openai", "openrouter", "deepseek"} and not model:
+            if provider in {"openai", "openrouter", "deepseek", "ollama"} and not model:
                 missing.append(t("api.field.model"))
 
             if missing:

@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     llm_provider: str = "mock"
     llm_temperature: float = 0.2
     llm_max_tokens: int = 4000
+
+    # Provider-agnostic overrides. These are what the CLI and the README use:
+    # without them the only way to pick a model is the web settings page, which a
+    # terminal-first tool must not require. Precedence, lowest to highest:
+    # provider-specific vars below < these < a value saved from the settings page.
+    llm_model: str = ""
+    llm_api_key: str = ""
+    llm_endpoint: str = ""
+    llm_deployment: str = ""
     azure_ai_endpoint: str = ""
     azure_ai_key: str = ""
     azure_ai_model_id: str = ""
@@ -34,6 +43,11 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_model: str = "deepseek-chat"
     deepseek_endpoint: str = "https://api.deepseek.com"
+
+    # Local runtime: no key, and the endpoint is the OpenAI-compatible shim Ollama
+    # serves on /v1.
+    ollama_model: str = "qwen3"
+    ollama_endpoint: str = "http://localhost:11434/v1"
 
     refinement_max_rounds: int = 3
     # Rounds to run before enoughContext may end the session; capped by max_rounds.
@@ -59,7 +73,13 @@ class Settings(BaseSettings):
 
     @cached_property
     def prompts_dir(self) -> Path:
-        return self.app_root / "prompts"
+        repo_prompts = self.app_root / "prompts"
+        if repo_prompts.is_dir():
+            return repo_prompts
+        # Installed as a wheel: app_root points at site-packages, where there is no
+        # top-level prompts/. The build copies them next to the package instead
+        # (see force-include in pyproject.toml).
+        return Path(__file__).resolve().parents[1] / "prompts"
 
     @cached_property
     def asset_version(self) -> str:
