@@ -86,10 +86,14 @@ def _add_missing_columns() -> None:
                 )
             logger.info("Backfilled refinement_sessions.subject_title from work_item_title")
         if "subject_id" in columns:
-            with engine.begin() as connection:
-                connection.execute(
-                    text("ALTER TABLE refinement_sessions ALTER COLUMN subject_id SET NOT NULL")
-                )
+            # SQLite cannot alter a column's nullability, and rejects the statement
+            # outright. It is also the fallback engine for local/CLI runs, so this
+            # has to be skipped rather than attempted and swallowed.
+            if engine.dialect.name != "sqlite":
+                with engine.begin() as connection:
+                    connection.execute(
+                        text("ALTER TABLE refinement_sessions ALTER COLUMN subject_id SET NOT NULL")
+                    )
             with engine.begin() as connection:
                 connection.execute(
                     text(

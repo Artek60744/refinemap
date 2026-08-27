@@ -1,64 +1,146 @@
-# RefineMap — le decision board des équipes produit & tech
+# RefineMap
 
-RefineMap transforme un brainstorm d'équipe flou en **décision priorisée** et en
-**livrable exploitable**, dans une seule session — sans repasser par Miro, Notion et
-Jira séparément.
+RefineMap transforme une idée floue en **décision argumentée** et en **spec markdown**,
+en local, dans ton dépôt. Tu arrives avec « il faudrait ajouter des notifications », tu
+repars avec un verdict explicite (Go / Explore / Rework / Drop), ses causes racines, ses
+blocages, et un fichier prêt à être lu — par toi ou par ton agent de code.
 
-> Ce n'est pas « un outil de brainstorming IA de plus » : c'est un **decision board**.
-> On y arrive avec une idée brute, on en repart avec un arbitrage explicite (Go /
-> Explore / Drop) et un artefact prêt à l'emploi (brief, backlog, note de cadrage).
+```bash
+pipx install git+https://github.com/Artek60744/refinement   # pas encore sur PyPI
+refinemap refine "Ajouter un système de notifications"
+# → .refinemap/ajouter-un-systeme-de-notifications-20260827-2120.md
+```
 
-- `frontend/` — SPA React 18 + TypeScript + Vite + Tailwind, servie par nginx en
-  production
-- `src/` — backend FastAPI : API JSON, moteur de refinement LangGraph, persistance
-  SQLAlchemy, fournisseurs LLM pluggables
+Ce n'est pas un chat. Le moteur pose des questions par rounds, refuse de conclure trop
+tôt, et rend un rapport structuré validé par schéma.
 
-## Pour qui
+## Pourquoi
 
-- **Cible principale** : PM, Product Owner ou Tech Lead dans une équipe produit-tech
-  de 3 à 10 personnes — celles qui souffrent le plus du passage brouillon entre idées,
-  arbitrage et delivery.
-- **Wedge initial** : le founder solo qui veut « raffiner une idée SaaS en MVP clair ».
-  Cas d'usage simple à comprendre, qui sert de porte d'entrée avant les mécaniques
-  d'équipe.
+Un agent de code part dans le mur sur une spec vague — et ça coûte cher, en tokens comme
+en relectures. Le goulot n'est plus d'écrire le code, c'est de savoir quoi écrire.
+RefineMap est la couche de cadrage qui précède : il interroge, il challenge, il tranche,
+et il dépose le résultat là où l'agent le lira.
 
-## Boucle de valeur
+## Comment ça marche
 
-L'utilisateur ne dessine pas des branches, il fait avancer une décision :
+1. Tu donnes un objectif en une phrase.
+2. Le moteur choisit une **grille de questions** (PO, technique ou hybride) et t'en pose
+   une série, avec pour chacune la raison pour laquelle elle est posée.
+3. Tes réponses sont résumées en faits, hypothèses, inconnues, dépendances et risques.
+4. Tant que le contexte est insuffisant, il relance un round.
+5. Il rend un **rapport de décision** : recommandation, confiance, cause racine, blocages
+   ordonnés, points déjà solides, prochaine action — plus un brief et un plan.
 
-1. **Capturer** une idée racine dans un board.
-2. **Challenger** l'idée sous plusieurs angles grâce à l'IA (problème, cible, valeur,
-   risque, dépendances, métriques).
-3. **Scorer** les options sur impact / effort / risque / confiance.
-4. **Exporter** un livrable actionnable : brief produit, backlog initial, note de
-   cadrage.
+## Ce qui le distingue d'un bon prompt
 
-Le critère de réussite : **une équipe part d'une idée brute et produit décision +
-artefact dans une seule session, sans revenir à son ancien enchaînement d'outils.**
+- **Un plancher de rounds.** Le LLM déclare « j'ai assez de contexte » beaucoup trop tôt.
+  Le routeur (`src/agents/refinement_workflow/graph.py`) impose un minimum de deux rounds
+  avant d'autoriser une conclusion.
+- **Des grilles par profil.** Les axes interrogés diffèrent selon qu'on cadre un besoin
+  produit ou un changement technique (`src/services/question_grids.py`).
+- **Une sortie contrainte.** Chaque réponse du LLM est validée par un modèle Pydantic en
+  `extra="forbid"` (`src/api/schemas_refinement.py`). Pas de champ inventé, pas de prose
+  à la place d'un verdict.
+- **Une mémoire produit.** Les contraintes, pivots et objections récurrents sont extraits
+  en fin de session, rattachés à un produit et réinjectés dans les suivantes. C'est la
+  seule chose qui s'accumule — et ce qu'un prompt ponctuel ne peut pas reproduire.
+- **Un repli honnête.** Si le fournisseur échoue, un moteur hors-ligne prend le relais et
+  le rapport est marqué comme dégradé, au lieu de servir du contenu de démonstration
+  sans le dire.
 
-## Ce qui nous différencie
+## Ce que ça ne fait pas
 
-- **Détection des flous** : l'outil repère les zones vagues, les mots trop larges, les
-  hypothèses non testées et les contradictions, puis pose les bonnes questions.
-- **Refinement multi-perspective** : un même sujet est challengé sous plusieurs angles
-  (technique, business, utilisateur, risque, faisabilité, originalité).
-- **Compression progressive** : partir d'un nuage d'idées, converger vers 3 options
-  solides, puis 1 recommandation justifiée.
-- **Mode débat** : une voix « critique » attaque les angles morts, une voix « builder »
-  propose des pistes concrètes, une voix « chercheur » apporte du contexte.
-- **Score vivant par nœud** : clarté, impact, effort, risque, confiance — visibles et
-  mis à jour au fil du refinement.
-- **Sorties actionnables** : brief, problématique, roadmap, backlog, plan de recherche,
-  outline, pitch.
+Autant l'écrire ici plutôt que te le laisser découvrir :
 
-Le cœur du produit — et son moat — n'est pas l'UI, mais le **moteur de refinement
-agentique** (LangGraph) et la mémoire produit : contraintes, pivots et objections
-récurrentes conservés d'une session à l'autre.
+- **pas de multi-utilisateur** — un seul utilisateur local, pas de comptes, pas d'équipes ;
+- **pas de connecteurs** Jira, Linear ou Notion, et il n'y en aura pas. Le format
+  d'intégration est un fichier markdown dans ton dépôt ;
+- **pas de scoring** ni de vote ni de board ;
+- **pas de service hébergé.**
 
-## Règle produit
+## Utiliser le CLI
 
-L'IA ne doit pas « tout écrire à la place de l'équipe ». Elle pose les bonnes
-questions, propose des angles et aide à converger. La décision reste celle de l'équipe.
+```bash
+refinemap refine "<ton objectif>"      # démarrer une session
+  --product <nom>                      #   rattacher à un produit (mémoire persistante)
+  --grid po|technique|hybride|auto     #   forcer la grille (défaut : détection)
+  --rounds N                           #   plafonner le nombre de rounds
+  --context "<contexte>"               #   contexte additionnel
+  -o <chemin> | --stdout               #   où écrire le rapport
+
+refinemap resume <session-id>          # reprendre une session interrompue
+refinemap list                         # lister les sessions
+refinemap export <session-id>          # réexporter un rapport
+refinemap memory [--product <nom>]     # inspecter la mémoire produit
+refinemap config                       # vérifier la configuration effective
+```
+
+Piper directement vers un agent :
+
+```bash
+refinemap refine "Migrer la base vers Postgres" --stdout > SPEC.md
+```
+
+Les sessions et la mémoire produit vivent dans `~/.refinemap/` (surchargeable par
+`REFINEMAP_HOME`), donc partagées entre tous tes dépôts. Les rapports, eux, sont écrits
+dans le répertoire courant.
+
+## Configurer un fournisseur LLM
+
+Par défaut, `LLM_PROVIDER=mock` : tout tourne hors ligne avec un moteur de démonstration,
+sans clé. Utile pour essayer l'outil, inutilisable pour du vrai travail.
+
+Configure un vrai fournisseur dans `~/.refinemap/.env` :
+
+```bash
+LLM_PROVIDER=openai       # openai | deepseek | openrouter | azure-openai | azure-foundry | ollama
+LLM_MODEL=gpt-4.1-mini
+LLM_API_KEY=sk-...
+```
+
+### En local, sans rien envoyer à un tiers
+
+C'est la raison d'être du support Ollama : tes specs ne quittent pas ta machine.
+
+```bash
+ollama serve
+ollama pull qwen3
+```
+
+```bash
+# ~/.refinemap/.env
+LLM_PROVIDER=ollama
+LLM_MODEL=qwen3
+# LLM_ENDPOINT=http://autre-machine:11434/v1   # si Ollama tourne ailleurs
+```
+
+Aucune clé d'API n'est requise ni demandée pour un fournisseur local.
+
+## L'interface web (optionnelle)
+
+Une SPA React couvre le même moteur, avec l'historique des sessions et l'édition de la
+mémoire produit. Elle est optionnelle : le CLI est le chemin principal.
+
+```bash
+pip install -e ".[server]"
+uvicorn src.main:app --reload --port 8000
+cd frontend && npm install && npm run dev   # http://localhost:5173
+```
+
+- `frontend/` — SPA React 18 + TypeScript + Vite + Tailwind
+- `src/` — moteur de refinement LangGraph, persistance SQLAlchemy, fournisseurs LLM
+  pluggables, et l'API JSON qui les expose
+
+## Domaine
+
+- **session** — un cadrage complet, du sujet au rapport (`RefinementSession`)
+- **subject** — l'énoncé normalisé, figé à l'ouverture (`SubjectSnapshot`)
+- **question round** — un tour de questions et ses réponses (`QuestionRound`, `Question`)
+- **summary** — faits, hypothèses, inconnues, dépendances, risques d'un round
+- **deliverable** — le rapport final : décision, brief, plan
+- **product** / **memory fact** — ce qui survit d'une session à l'autre
+
+Voir `src/models/refinement.py` et `src/models/product_memory.py`.
 
 ## Architecture
 
@@ -67,8 +149,8 @@ questions, propose des angles et aide à converger. La décision reste celle de 
 - Le backend FastAPI possède l'orchestration, la persistance et les credentials.
 - La boucle de refinement est une **machine à états LangGraph**, pas un chat libre.
 - Chaque étape LLM renvoie du JSON structuré validé par Pydantic et JSON Schema.
-- `thread_id` aligne les checkpoints LangGraph avec les entités applicatives
-  (board / nœud) ; PostgreSQL reste la source de vérité.
+- `thread_id` aligne les checkpoints LangGraph avec la session applicative ; la base
+  (SQLite en local, PostgreSQL si configurée) reste la source de vérité.
 - En production, un conteneur nginx sert la SPA buildée et reverse-proxy `/api` et
   `/health` vers le backend — même origine, donc pas de CORS.
 - i18n : le catalogue UI (fr/en) vit dans `frontend/src/i18n/catalog.ts` ; le backend
@@ -80,50 +162,32 @@ questions, propose des angles et aide à converger. La décision reste celle de 
 
 - Frontend : `React 18`, `TypeScript`, `Vite`, `react-router`, `Tailwind CSS v4`
 - Backend : `FastAPI`, `LangGraph`, `Pydantic v2`, `SQLAlchemy 2.x`
-- Base de données : `PostgreSQL` (repli SQLite pour les runs locaux)
-- Fournisseur LLM : pluggable (mock par défaut ; Azure AI Foundry / Azure OpenAI /
-  OpenAI / OpenRouter configurables depuis la page settings)
+- Base de données : `SQLite` par défaut, `PostgreSQL` pour un déploiement serveur
+- Fournisseur LLM : pluggable (mock par défaut ; Ollama, OpenAI, DeepSeek,
+  OpenRouter, Azure OpenAI et Azure AI Foundry)
+- CLI : bibliothèque standard uniquement (`argparse`, `textwrap`)
 
-Le socle FastAPI + LangGraph + SQLAlchemy est conservé volontairement : le moteur de
-refinement agentique est précisément la valeur différenciante du produit.
-
-## Domaine
-
-Les entités du produit tournent autour du board de décision :
-
-- **workspace** — l'espace d'une équipe
-- **board** — un atelier de refinement
-- **node** — une idée (racine ou dérivée), organisée en arborescence
-- **refinement** — une itération IA sur un nœud (axes, questions, critiques)
-- **score** — impact / effort / risque / confiance sur un nœud
-- **export** — un livrable généré (brief, backlog, note de cadrage)
-
-Voir `openwiki/domain/data-model.md` pour le modèle relationnel cible.
-
-## Lancer en local (dev)
-
-Backend (terminal 1) :
+## Développer
 
 ```bash
-pip install -r requirements.txt
-# sans PostgreSQL local :
-# DATABASE_URL=sqlite:///./refinement.db
-uvicorn src.main:app --reload --port 8000
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+pip install -e ".[server]"
+pytest
 ```
 
-Frontend (terminal 2) :
+Pour le frontend, le serveur de dev Vite proxifie `/api` et `/health` vers le backend,
+donc tout reste en même origine :
 
 ```bash
-cd frontend
-npm install
-npm run dev
+uvicorn src.main:app --reload --port 8000   # terminal 1
+cd frontend && npm install && npm run dev   # terminal 2 → http://localhost:5173
 ```
 
-Ouvrir <http://localhost:5173>. Le serveur de dev Vite proxifie `/api` et `/health`
-vers le backend, donc tout reste en même origine.
+Le mode par défaut (`LLM_PROVIDER=mock`) fait tourner le flux complet sans dépendance
+externe ni clé d'API — c'est aussi ce que fait la suite de tests.
 
-Le mode par défaut (`LLM_PROVIDER=mock`) fait tourner le flux complet en local sans
-dépendance externe.
+Voir [CONTRIBUTING.md](CONTRIBUTING.md) pour les conventions et le périmètre accepté.
 
 ## Lancer avec Docker
 
@@ -133,19 +197,23 @@ docker compose up --build
 
 Ouvrir <http://localhost/> — nginx sert la SPA et proxifie l'API.
 
-## Déployer et mettre à jour
+## Héberger sa propre instance (optionnel)
 
-L'application est déployée sur une VM Azure et mise à jour avec `./deploy.sh` :
+RefineMap est conçu pour tourner en local. Il n'y a **pas d'instance publique** : le
+produit n'est pas un service hébergé, et l'application n'a aucune authentification — ne
+l'expose pas sur une IP publique sans restriction d'accès devant.
+
+`./deploy.sh` reste fourni pour qui veut héberger la sienne sur une VM Azure. Le script
+ne contient aucun identifiant : copier `deploy.env.example` vers `deploy.env` (non
+tracké) et le remplir.
 
 ```bash
-./deploy.sh dev      # une fois : activer le hot reload Python sur la VM
-./deploy.sh sync     # après chaque changement (rebuild l'image web si besoin)
-./deploy.sh logs     # voir ce qui s'est passé
+cp deploy.env.example deploy.env   # puis renseigner les variables AZ_*
+./deploy.sh sync                   # déployer / mettre à jour
+./deploy.sh logs                   # voir ce qui s'est passé
 ```
 
-En ligne sur <http://203.0.113.10/>.
-Voir `openwiki/operations/deployment.md` pour le guide complet, y compris le contrôle des coûts et
-les limites de sécurité actuelles.
+Voir `openwiki/operations/deployment.md` pour le guide complet.
 
 ## Documentation temps réel (OpenWiki)
 
@@ -185,29 +253,21 @@ OPENWIKI_MODEL_ID=deepseek-v4-flash
 Ou passer ces variables en environnement à chaque `npm run docs:*` — pratique pour
 reprendre `DEEPSEEK_API_KEY` et `DEEPSEEK_MODEL` depuis le `.env` du repo.
 
-## Critères de succès MVP
+## Feuille de route
 
-- une équipe crée un board et une idée racine en moins de 2 minutes
-- le moteur de refinement génère des axes et des questions utiles, non redondantes
-- l'équipe peut scorer les options et trancher (Go / Explore / Drop) sans quitter le
-  produit
-- la session produit un livrable exportable (brief Markdown, backlog CSV/JSON, note de
-  cadrage)
-- **validation clé** : une équipe part d'une idée brute et obtient décision + artefact
-  dans une seule session, sans repasser par son outil précédent pour le travail
-  principal
+Ce qui est envisagé, dans l'ordre :
 
-## Prochains incréments techniques
+1. Enrichir la mémoire produit : confirmation assistée des faits, détection des
+   contradictions entre sessions.
+2. Remplacer le bootstrap `create_all()` par de vraies migrations Alembic.
+3. Grilles de questions personnalisables par l'utilisateur.
+4. Publication sur PyPI.
 
-1. remplacer le LLM mock par un vrai client fournisseur
-2. faire converger le modèle de données actuel vers le domaine board (voir
-   `openwiki/domain/data-model.md`)
-3. remplacer le bootstrap `create_all()` par des migrations Alembic
-4. ajouter l'authentification (magic link / Google) et l'appartenance workspace
-5. ajouter la couche décisionnelle (scoring, vote, tags) et les exports
+Ce qui n'y figurera pas : authentification, multi-tenant, connecteurs de delivery.
+Voir « Ce que ça ne fait pas » plus haut — c'est une décision de périmètre, pas un
+manque de temps.
 
-## Intégrations futures (post-MVP)
+## Licence
 
-Les connecteurs de delivery — Jira, Linear, Azure DevOps — sont des intégrations P2 :
-utiles pour pousser un backlog validé vers l'exécution, mais pas nécessaires pour
-tester la valeur centrale. Un export propre (Markdown / CSV / JSON) suffit d'abord.
+MIT — voir [LICENSE](LICENSE). Les contributions sont bienvenues, voir
+[CONTRIBUTING.md](CONTRIBUTING.md).
