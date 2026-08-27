@@ -64,7 +64,13 @@ class Settings(BaseSettings):
 
     @cached_property
     def prompts_dir(self) -> Path:
-        return self.app_root / "prompts"
+        repo_prompts = self.app_root / "prompts"
+        if repo_prompts.is_dir():
+            return repo_prompts
+        # Installed as a wheel: app_root points at site-packages, where there is no
+        # top-level prompts/. The build copies them next to the package instead
+        # (see force-include in pyproject.toml).
+        return Path(__file__).resolve().parents[1] / "prompts"
 
     @cached_property
     def asset_version(self) -> str:
