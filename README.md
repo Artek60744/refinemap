@@ -133,19 +133,23 @@ docker compose up --build
 
 Ouvrir <http://localhost/> — nginx sert la SPA et proxifie l'API.
 
-## Déployer et mettre à jour
+## Héberger sa propre instance (optionnel)
 
-L'application est déployée sur une VM Azure et mise à jour avec `./deploy.sh` :
+RefineMap est conçu pour tourner en local. Il n'y a **pas d'instance publique** : le
+produit n'est pas un service hébergé, et l'application n'a aucune authentification — ne
+l'expose pas sur une IP publique sans restriction d'accès devant.
+
+`./deploy.sh` reste fourni pour qui veut héberger la sienne sur une VM Azure. Le script
+ne contient aucun identifiant : copier `deploy.env.example` vers `deploy.env` (non
+tracké) et le remplir.
 
 ```bash
-./deploy.sh dev      # une fois : activer le hot reload Python sur la VM
-./deploy.sh sync     # après chaque changement (rebuild l'image web si besoin)
-./deploy.sh logs     # voir ce qui s'est passé
+cp deploy.env.example deploy.env   # puis renseigner les variables AZ_*
+./deploy.sh sync                   # déployer / mettre à jour
+./deploy.sh logs                   # voir ce qui s'est passé
 ```
 
-En ligne sur <http://203.0.113.10/>.
-Voir `openwiki/operations/deployment.md` pour le guide complet, y compris le contrôle des coûts et
-les limites de sécurité actuelles.
+Voir `openwiki/operations/deployment.md` pour le guide complet.
 
 ## Documentation temps réel (OpenWiki)
 
