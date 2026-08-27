@@ -16,6 +16,7 @@ from src.config.settings import settings
 from src.i18n import t
 from src.models.app_settings import SENSITIVE_SETTING_KEYS, SettingCategories, SettingKeys
 from src.repositories.settings_repository import SettingsRepository
+from src.services.refinement_llm import KEYLESS_PROVIDERS
 from src.utils.encryption import decrypt_value, encrypt_value
 
 
@@ -82,6 +83,12 @@ class SettingsService:
             key_fallback = settings.deepseek_api_key
             model_fallback = settings.deepseek_model
             endpoint_fallback = settings.deepseek_endpoint
+        elif provider == "ollama":
+            # No key fallback on purpose: inheriting an Azure/OpenAI key here would
+            # ship a real credential to a local endpoint.
+            key_fallback = ""
+            model_fallback = settings.ollama_model
+            endpoint_fallback = settings.ollama_endpoint
         else:
             key_fallback = settings.azure_ai_key or settings.openai_api_key
             model_fallback = settings.openai_model
@@ -112,15 +119,16 @@ class SettingsService:
                 details={"provider": provider},
             )
 
-        if provider in {"azure-foundry", "azure-openai", "openai", "openrouter", "deepseek"}:
+        if provider in {"azure-foundry", "azure-openai", "openai", "openrouter", "deepseek", "ollama"}:
             missing = []
-            if not api_key:
+            # A local runtime has no credentials to check — only a model to pick.
+            if not api_key and provider not in KEYLESS_PROVIDERS:
                 missing.append(t("api.field.api_key"))
             if provider in {"azure-foundry", "azure-openai"} and not endpoint:
                 missing.append(t("api.field.endpoint"))
             if provider in {"azure-foundry", "azure-openai"} and not deployment:
                 missing.append(t("api.field.deployment"))
-            if provider in {"openai", "openrouter", "deepseek"} and not model:
+            if provider in {"openai", "openrouter", "deepseek", "ollama"} and not model:
                 missing.append(t("api.field.model"))
 
             if missing:

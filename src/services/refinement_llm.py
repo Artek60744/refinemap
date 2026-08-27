@@ -377,6 +377,11 @@ class MockRefinementLLM:
 # Real engine: any OpenAI-compatible /chat/completions endpoint
 # ---------------------------------------------------------------------------
 
+# Providers that run locally and expose an OpenAI-compatible API without auth.
+# They are the answer to "I can't send my specs to a third-party LLM", so they
+# must stay selectable with an empty api_key everywhere it is validated.
+KEYLESS_PROVIDERS = frozenset({"ollama"})
+
 
 def _repair_json_text(text: str) -> str:
     text = re.sub(r",\s*([}\]])", r"\1", text)
@@ -447,6 +452,7 @@ class OpenAICompatibleLLM:
         defaults = {
             "deepseek": "https://api.deepseek.com",
             "openrouter": "https://openrouter.ai/api/v1",
+            "ollama": "http://localhost:11434/v1",
         }
         base = self.endpoint or defaults.get(self.provider, "https://api.openai.com/v1")
         return f"{base}/chat/completions"
@@ -454,7 +460,12 @@ class OpenAICompatibleLLM:
     def _headers(self) -> dict[str, str]:
         if self._is_azure:
             return {"api-key": self.api_key, "Content-Type": "application/json"}
-        return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json"}
+        # A local runtime (Ollama, llama.cpp, LM Studio) has no key. Sending
+        # "Bearer " with nothing after it is worse than sending no header at all.
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
 
     async def _chat_json(
         self, system_prompt: str, task_prompt: str, context: dict[str, Any], max_tokens: int | None = None
@@ -590,6 +601,18 @@ def build_refinement_llm(
     model: str = "",
 ) -> RefinementLLM:
     """Return a real OpenAI-compatible engine when configured, else the offline mock."""
+    # Local runtimes are reachable without credentials, so requiring an api_key to
+    # leave the mock would make them impossible to select.
+    if provider in KEYLESS_PROVIDERS:
+        return OpenAICompatibleLLM(
+            provider=provider,
+            endpoint=endpoint,
+            api_key=api_key,
+            deployment=deployment,
+            model=model,
+            temperature=settings.llm_temperature,
+            max_tokens=settings.llm_max_tokens,
+        )
     if provider and provider != "mock" and api_key:
         return OpenAICompatibleLLM(
             provider=provider,

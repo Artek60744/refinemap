@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-chat"
     deepseek_endpoint: str = "https://api.deepseek.com"
 
+    # Local runtime: no key, and the endpoint is the OpenAI-compatible shim Ollama
+    # serves on /v1.
+    ollama_model: str = "qwen3"
+    ollama_endpoint: str = "http://localhost:11434/v1"
+
     refinement_max_rounds: int = 3
     # Rounds to run before enoughContext may end the session; capped by max_rounds.
     refinement_min_rounds: int = 2

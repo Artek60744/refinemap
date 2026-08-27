@@ -11,7 +11,14 @@ const LLM_FIELDS_BY_PROVIDER: Record<string, string[]> = {
   "azure-openai": ["endpoint", "deployment"],
   openai: ["model"],
   openrouter: ["model"],
+  // Endpoint stays editable: Ollama may run on another machine on the LAN.
+  ollama: ["model", "endpoint"],
 };
+
+// Local runtimes need no credentials — showing an API key field for them only
+// invites people to paste a real key into a local endpoint.
+// Mirrors KEYLESS_PROVIDERS in src/services/refinement_llm.py.
+const KEYLESS_PROVIDERS = ["ollama"];
 
 const INPUT_CLASS =
   "w-full rounded-lg border border-border-subtle bg-white px-4 py-3 text-sm text-on-surface placeholder:text-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors";
@@ -191,6 +198,7 @@ export default function SettingsPage() {
                 <option value="azure-openai">Azure OpenAI</option>
                 <option value="openai">OpenAI</option>
                 <option value="openrouter">OpenRouter</option>
+                <option value="ollama">Ollama (local)</option>
               </select>
             </div>
 
@@ -236,17 +244,19 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <div>
-              <label className={LABEL_CLASS}>{t("llm.api_key")}</label>
-              <input
-                type="password"
-                value={form.llmApiKey}
-                onChange={(event) => set("llmApiKey", event.target.value)}
-                placeholder={t("llm.api_key_placeholder")}
-                className={INPUT_CLASS}
-              />
-              <p className="mt-2 text-xs text-outline">{keyHintText}</p>
-            </div>
+            {!KEYLESS_PROVIDERS.includes(form.llmProvider) && (
+              <div>
+                <label className={LABEL_CLASS}>{t("llm.api_key")}</label>
+                <input
+                  type="password"
+                  value={form.llmApiKey}
+                  onChange={(event) => set("llmApiKey", event.target.value)}
+                  placeholder={t("llm.api_key_placeholder")}
+                  className={INPUT_CLASS}
+                />
+                <p className="mt-2 text-xs text-outline">{keyHintText}</p>
+              </div>
+            )}
           </div>
 
           <ConnectionResult result={llmTestResult} />
