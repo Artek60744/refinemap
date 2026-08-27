@@ -30,6 +30,9 @@ export default function Layout() {
           <NavLink to="/refinement/history" className={navLinkClass}>
             {t("nav.history")}
           </NavLink>
+          <NavLink to="/memory" className={navLinkClass}>
+            {t("nav.memory")}
+          </NavLink>
           <NavLink to="/settings" className={navLinkClass}>
             {t("nav.settings")}
           </NavLink>

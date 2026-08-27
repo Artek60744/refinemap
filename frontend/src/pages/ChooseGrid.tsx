@@ -38,7 +38,12 @@ export default function ChooseGrid() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
-  const objective = (location.state as { objective?: string } | null)?.objective ?? "";
+  const routeState = location.state as
+    | { objective?: string; productId?: string | null; productName?: string }
+    | null;
+  const objective = routeState?.objective ?? "";
+  const productId = routeState?.productId ?? null;
+  const productName = routeState?.productName ?? "";
 
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +57,7 @@ export default function ChooseGrid() {
     setPending(mode);
     setError(null);
     try {
-      const response = await createSession({ objective, mode });
+      const response = await createSession({ objective, mode, productId, productName });
       navigate(`/refinement/sessions/${response.session.id}`, {
         state: { degraded: response.degraded },
       });

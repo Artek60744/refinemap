@@ -1,7 +1,7 @@
 # Task — Generate the next question round
 
 Use the system instructions and the provided context (subject, active `grid`,
-`grid_axes`, extra context, previous facts/assumptions/unknowns/answers).
+`grid_axes`, extra context, product memory, previous facts/assumptions/unknowns/answers).
 
 `answers` contains joined pairs — each item has `question`, `answer`, `theme` and `round`,
 so you can read every answer against the question that produced it. `asked_questions` lists
@@ -11,7 +11,19 @@ Objectives:
 
 - reduce ambiguity on this subject quickly
 - avoid questions already answered or already implied by known facts
+- avoid questions already answered by `product_memory`
 - ask at most `max_questions_per_round` questions
+
+Product memory (applies to EVERY round):
+
+- `product_memory` lists durable facts established during previous sessions on this
+  product. They are acquired. A question whose answer is already in `product_memory`
+  is a failure, exactly like re-asking a question from `asked_questions`.
+- Build on them instead: if the memory says the backend is .NET, do not ask which
+  backend — ask what that constrains for THIS subject.
+- One exception: when an answer in `answers` contradicts a memorized fact, ask one
+  targeted confirmation question that quotes the memorized fact and forces a choice
+  between the two versions. Never re-ask it as an open question.
 
 Round behavior (`round` is 0-based: 0 = first round, 1 = second round, ...):
 
@@ -30,17 +42,30 @@ Instructions:
 
 1. Pick the highest-value uncertainties to clarify given what is still unknown.
 2. Produce one focused question per uncertainty, each with a short `why`.
-3. Set `theme` to the grid axis label the question belongs to — for follow-ups, reuse the
+   Every question must force ONE of these four answer shapes — nothing else:
+   - a number or a threshold ("above which volume does this stop being acceptable?");
+   - a binary choice, or a choice between named options;
+   - a named owner (who decides, who maintains);
+   - a testable success condition.
+   A question whose answer could be a paragraph of prose is a failure. "Can you clarify
+   X?" is a failure; "what exact threshold on X turns this subject from explore to go?"
+   is the target.
+3. The `why` must name the DECISION the answer unlocks — "without this we cannot choose
+   between X and Y", not "this would help understand the context". If you cannot name the
+   decision the answer changes, drop the question.
+4. Set `theme` to the grid axis label the question belongs to — for follow-ups, reuse the
    `theme` of the question or answer you are drilling into.
-4. Set `priority` to `high`, `medium`, or `low`.
-5. Give 2 to 4 `suggestions`: short plausible answers (max ~60 characters, no sentence) the
+5. Set `priority` to `high`, `medium`, or `low`. Order the questions by decisional
+   impact: the one whose answer moves the verdict the most comes first.
+6. Give 2 to 4 `suggestions`: short plausible answers (max ~60 characters, no sentence) the
    user can pick in one click. They must be mutually exclusive and realistic for THIS subject
    — concrete values, options or trade-offs, never generic filler like "oui" / "non" / "à
-   définir". If no plausible answer can be inferred from the context, return an empty list
-   rather than inventing one.
-6. If context is already sufficient to write the deliverable, set `stopCriteria=true`
+   définir". For a threshold question they are concrete values; for a choice question they
+   are the named options. If no plausible answer can be inferred from the context, return an
+   empty list rather than inventing one.
+7. If context is already sufficient to write the deliverable, set `stopCriteria=true`
    and keep the list minimal.
-7. Avoid vague questions ("anything else?"). Each question targets one uncertainty and
+8. Avoid vague questions ("anything else?"). Each question targets one uncertainty and
    is answerable by the team.
 
 Return strict JSON only:

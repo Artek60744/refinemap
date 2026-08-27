@@ -98,7 +98,7 @@ Les entités du produit tournent autour du board de décision :
 - **score** — impact / effort / risque / confiance sur un nœud
 - **export** — un livrable généré (brief, backlog, note de cadrage)
 
-Voir `docs/sqlalchemy-data-model.md` pour le modèle relationnel cible.
+Voir `openwiki/domain/data-model.md` pour le modèle relationnel cible.
 
 ## Lancer en local (dev)
 
@@ -144,8 +144,46 @@ L'application est déployée sur une VM Azure et mise à jour avec `./deploy.sh`
 ```
 
 En ligne sur <http://203.0.113.10/>.
-Voir `docs/deployment.md` pour le guide complet, y compris le contrôle des coûts et
+Voir `openwiki/operations/deployment.md` pour le guide complet, y compris le contrôle des coûts et
 les limites de sécurité actuelles.
+
+## Documentation temps réel (OpenWiki)
+
+Le repo embarque [OpenWiki](https://github.com/langchain-ai/openwiki), un CLI qui
+génère et maintient un wiki Markdown de la codebase dans `openwiki/` — **en
+français** — visualisable sous forme de **graphe de connaissances** interactif.
+La doc se met à jour automatiquement à chaque changement de code.
+
+```bash
+npm install            # une fois : installe le CLI (devDependency)
+npm run docs:init      # première génération interactive (provider / clé / modèle)
+npm run docs:update    # régénérer la doc (one-shot, non interactif, en français)
+npm run docs:watch     # temps réel : surveille src/, frontend/src/
+                       # et met à jour la doc à chaque changement (debounce 8 s)
+npm run docs:visualize # graphe de connaissances interactif (127.0.0.1:4321)
+```
+
+- Le wiki vit dans `openwiki/` et est commité avec le code.
+- OpenWiki maintient `AGENTS.md` et `CLAUDE.md` (bloc `OPENWIKI:START/END`) pour
+  pointer les agents vers le wiki.
+- Le périmètre lu par la doc est contrôlé par `.openwikiignore`.
+- La CI GitHub Actions (`openwiki-docs.yml`) régénère la doc à chaque push sur
+  `dev`. En local, `npm run docs:watch` reste dispo en opt-in pour les branches
+  de feature.
+
+### Configurer DeepSeek
+
+Config locale persistée dans `~/.openwiki/.env` :
+
+```
+OPENWIKI_PROVIDER=openai-compatible
+OPENAI_COMPATIBLE_BASE_URL=https://api.deepseek.com/v1
+OPENAI_COMPATIBLE_API_KEY=sk-...
+OPENWIKI_MODEL_ID=deepseek-v4-flash
+```
+
+Ou passer ces variables en environnement à chaque `npm run docs:*` — pratique pour
+reprendre `DEEPSEEK_API_KEY` et `DEEPSEEK_MODEL` depuis le `.env` du repo.
 
 ## Critères de succès MVP
 
@@ -163,7 +201,7 @@ les limites de sécurité actuelles.
 
 1. remplacer le LLM mock par un vrai client fournisseur
 2. faire converger le modèle de données actuel vers le domaine board (voir
-   `docs/sqlalchemy-data-model.md`)
+   `openwiki/domain/data-model.md`)
 3. remplacer le bootstrap `create_all()` par des migrations Alembic
 4. ajouter l'authentification (magic link / Google) et l'appartenance workspace
 5. ajouter la couche décisionnelle (scoring, vote, tags) et les exports

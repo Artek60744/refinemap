@@ -11,14 +11,18 @@ logger = logging.getLogger(__name__)
 
 from src.api.schemas_refinement import (
     BriefSection,
+    DecisionReport,
     DetectModeOutput,
     GenerateQuestionsOutput,
     PlanStep,
+    ProductMemoryOp,
+    ProductMemoryOpsOutput,
     QuestionItem,
     RefinementDeliverableOutput,
     SessionSummaryOutput,
 )
 from src.config.settings import settings
+from src.services.product_memory_rules import classify_memory_category, is_durable_statement
 from src.services.prompt_loader import PromptLoader
 from src.services.question_grids import (
     detect_grid_by_keywords,
@@ -40,6 +44,9 @@ class RefinementLLM(Protocol):
         ...
 
     async def generate_final_refinement(self, context: dict[str, Any]) -> RefinementDeliverableOutput:
+        ...
+
+    async def extract_product_memory(self, context: dict[str, Any]) -> ProductMemoryOpsOutput:
         ...
 
 
@@ -175,6 +182,9 @@ class MockRefinementLLM:
 
         facts = self._dedupe(list(context.get("facts", [])))
         unknowns = self._dedupe(list(context.get("unknowns", [])))
+        assumptions = self._dedupe(list(context.get("assumptions", [])))
+        risks = self._dedupe(list(context.get("risks", [])))
+        confidence = context.get("confidence", "low")
 
         # Group answered questions under their theme (grid axis) -> Brief sections.
         asked = {item["id"]: item for item in context.get("asked_questions", [])}
@@ -209,6 +219,133 @@ class MockRefinementLLM:
             plan=plan,
             codeDraft=code_draft,
             openQuestions=unknowns,
+            decisionReport=self._build_decision_report(
+                facts=facts,
+                unknowns=unknowns,
+                assumptions=assumptions,
+                risks=risks,
+                confidence=confidence,
+                grid=grid,
+            ),
+        )
+
+    async def extract_product_memory(self, context: dict[str, Any]) -> ProductMemoryOpsOutput:
+        """Promote the session's durable facts into the product memory.
+
+        Offline rules only: a fact enters the memory if it is a short statement with
+        no temporal anchor and no equivalent already memorized. The mock never emits
+        `update` or `remove` — rewriting a memorized fact needs a judgment it cannot
+        make, and archiving on a heuristic would silently erase real knowledge.
+        """
+        known = {
+            (item.get("statement") or "").strip().lower()
+            for item in context.get("product_memory", [])
+        }
+        ops: list[ProductMemoryOp] = []
+        for fact in self._dedupe(list(context.get("facts", []))):
+            if self._looks_unknown(fact) or not is_durable_statement(fact):
+                continue
+            if fact.strip().lower() in known:
+                continue
+            known.add(fact.strip().lower())
+            ops.append(
+                ProductMemoryOp(
+                    action="add",
+                    category=classify_memory_category(fact),
+                    statement=fact.strip(),
+                )
+            )
+
+        return ProductMemoryOpsOutput(
+            ops=ops,
+            reason=f"{len(ops)} fait(s) durable(s) retenu(s) hors ligne.",
+        )
+
+    def _build_decision_report(
+        self,
+        *,
+        facts: list[str],
+        unknowns: list[str],
+        assumptions: list[str],
+        risks: list[str],
+        confidence: str,
+        grid: str,
+    ) -> DecisionReport:
+        # Deterministic arbitration rules, evaluated in order. The confidence is the
+        # solidity of the verdict: a drop forced by an empty fact base is a firm call.
+        if not facts and len(unknowns) >= 3:
+            recommendation, decision_confidence = "drop", "high"
+        elif not unknowns and confidence == "high" and len(risks) <= 1:
+            recommendation, decision_confidence = "go", "high"
+        elif len(risks) >= 3 or len(risks) > len(facts):
+            recommendation, decision_confidence = "rework", "medium"
+        else:
+            recommendation = "explore"
+            decision_confidence = "medium"
+
+        # One list of blocking subjects feeds the root cause, the blockers and the next
+        # action, so the three always point at the same thing. A `go` has none.
+        if recommendation == "go":
+            blocking_label, blocking_items = "", []
+        elif recommendation == "rework" and risks:
+            blocking_label, blocking_items = "Risque bloquant", risks[:2]
+        elif unknowns:
+            blocking_label, blocking_items = "Inconnue bloquante", unknowns[:2]
+        elif risks:
+            blocking_label, blocking_items = "Risque bloquant", risks[:2]
+        else:
+            blocking_label = "Cadrage bloquant"
+            blocking_items = ["le sujet ne permet pas de trancher en l'état"]
+
+        # One main blocker, one secondary at most: beyond that it is a shopping list.
+        blockers = [f"{blocking_label} : {item}" for item in blocking_items]
+
+        # reasons[0] is the root cause — the item that, once lifted, flips the verdict.
+        # Counting facts against unknowns is a meeting report, not a judgment.
+        if recommendation == "go":
+            root_cause = (
+                f"Aucun blocage résiduel : {facts[0]}"
+                if facts
+                else "Aucun risque ni inconnue résiduelle : le sujet est actionnable."
+            )
+        else:
+            root_cause = f"Cause racine : {blocking_items[0]}"
+
+        main_item = blocking_items[0] if blocking_items else None
+        secondaries: list[str] = []
+        for unknown in unknowns:
+            if unknown != main_item:
+                secondaries.append(f"Inconnue non levée : {unknown}")
+                break
+        for risk in risks:
+            if risk != main_item:
+                secondaries.append(f"Risque identifié : {risk}")
+                break
+        if assumptions:
+            secondaries.append(f"Hypothèse non vérifiée : {assumptions[0]}")
+        if not secondaries:
+            secondaries.append("Aucun autre point ne pèse sur ce verdict.")
+
+        strengths = facts[:3]
+        if not strengths:
+            strengths = [f"Le périmètre est cadré par la grille {grid.upper()}."]
+
+        if recommendation == "go":
+            next_action = "Lancer la mise en œuvre du plan proposé."
+        elif recommendation == "rework":
+            next_action = f"Reformuler le sujet en traitant : {main_item}"
+        elif recommendation == "drop":
+            next_action = f"Ne pas poursuivre ; ne rouvrir que si ce point tombe : {main_item}"
+        else:
+            next_action = f"Trancher en priorité : {main_item}"
+
+        return DecisionReport(
+            recommendation=recommendation,
+            confidence=decision_confidence,
+            reasons=[root_cause, *secondaries][:4],
+            blockers=blockers[:2],
+            strengths=strengths,
+            nextAction=next_action,
         )
 
     # -- helpers --
@@ -246,6 +383,7 @@ def _repair_json_text(text: str) -> str:
     text = re.sub(r"([{,])\s*'([^']*)'\s*:", r'\1 "\2":', text)
     text = re.sub(r":\s*'([^']*)'", r': "\1"', text)
     text = re.sub(r'"([^"\\]*(\\.[^"\\]*)*)"\s+(?=")', r'"\1", ', text)
+    text = re.sub(r'([}\]"])\s+(?=")', r"\1, ", text)
     return text
 
 
@@ -341,42 +479,53 @@ class OpenAICompatibleLLM:
         # DeepSeek's thinking-capable models (deepseek-v4-*) reason by default, and the
         # reasoning tokens count against max_tokens — on large contexts they can exhaust
         # the budget and leave `content` empty, which degrades the whole round to the
-        # offline fallback. Curb the effort so reasoning stays short and content is always
-        # emitted. (temperature is silently ignored while thinking is enabled.)
+        # offline fallback. Curb the effort so reasoning stays short, and raise the
+        # budget well above the observed reasoning burn (~3k tokens at "low").
+        # (temperature is silently ignored while thinking is enabled.)
         if self.provider == "deepseek":
             body["reasoning_effort"] = "low"
+            body["max_tokens"] = max(body["max_tokens"], 8000)
 
-        async with httpx.AsyncClient(timeout=90.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(self._url(), headers=self._headers(), json=body)
             response.raise_for_status()
             payload = response.json()
-        content = payload["choices"][0]["message"]["content"]
+        content = payload["choices"][0]["message"]["content"] or ""
+        finish_reason = payload["choices"][0].get("finish_reason")
 
         try:
             return _extract_json(content)
         except json.JSONDecodeError as exc:
             # One corrective retry: the model already produced the right content, it
             # only broke the encoding — asking it to re-emit valid JSON usually saves
-            # the round instead of dropping to the offline fallback.
+            # the round instead of dropping to the offline fallback. When the response
+            # hit the token cap, double the budget and ask for the bare JSON only.
+            if finish_reason == "length":
+                retry_prompt = (
+                    f"Your previous response was cut off (max_tokens reached) and is not valid JSON ({exc}). "
+                    "Do NOT reason about this: emit ONLY the final JSON object, complete and valid. "
+                    'Escape every double quote inside string values as \\" (or replace it with « »). '
+                    "No prose, no code fences."
+                )
+                body["max_tokens"] = min(body["max_tokens"] * 2, 16384)
+            else:
+                retry_prompt = (
+                    f"Your previous response is not valid JSON ({exc}). Re-emit the exact same content "
+                    'as ONE valid JSON object. Escape every double quote inside string values as \\" '
+                    "(or replace it with « »). No prose, no code fences."
+                )
             logger.warning("Invalid JSON from %s (%s); asking the model to re-emit it.", self.model_name, exc)
             body["messages"] = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user},
                 {"role": "assistant", "content": content},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Your previous response is not valid JSON ({exc}). Re-emit the exact same content "
-                        'as ONE valid JSON object. Escape every double quote inside string values as \\" '
-                        "(or replace it with « »). No prose, no code fences."
-                    ),
-                },
+                {"role": "user", "content": retry_prompt},
             ]
-            async with httpx.AsyncClient(timeout=90.0) as client:
+            async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(self._url(), headers=self._headers(), json=body)
                 response.raise_for_status()
                 payload = response.json()
-            return _extract_json(payload["choices"][0]["message"]["content"])
+            return _extract_json(payload["choices"][0]["message"]["content"] or "")
 
     def _system(self) -> str:
         return self.prompt_loader.load("system-refinement")
@@ -421,6 +570,15 @@ class OpenAICompatibleLLM:
             logger.warning("generate_final_refinement via %s failed (%s); using offline fallback.", self.model_name, exc)
             self.degraded = True
             return await self._fallback.generate_final_refinement(context)
+
+    async def extract_product_memory(self, context: dict[str, Any]) -> ProductMemoryOpsOutput:
+        try:
+            data = await self._chat_json(self._system(), self.prompt_loader.load("extract-product-memory"), context)
+            return ProductMemoryOpsOutput.model_validate(data)
+        except Exception as exc:
+            logger.warning("extract_product_memory via %s failed (%s); using offline fallback.", self.model_name, exc)
+            self.degraded = True
+            return await self._fallback.extract_product_memory(context)
 
 
 def build_refinement_llm(

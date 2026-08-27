@@ -1,4 +1,5 @@
 import type { RefinementDeliverable } from "../types/api";
+import DecisionReportView from "./DecisionReportView";
 
 function ItemList({ items }: { items: string[] }) {
   if (!items || items.length === 0) {
@@ -16,6 +17,10 @@ function ItemList({ items }: { items: string[] }) {
 export default function ArtifactView({ deliverable }: { deliverable: RefinementDeliverable }) {
   return (
     <div className="space-y-6">
+      {deliverable.decisionReport && (
+        <DecisionReportView report={deliverable.decisionReport} variant="full" />
+      )}
+
       {deliverable.summary && (
         <section className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-outline">Résumé</p>

@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { archiveMemoryFact, updateMemoryFact } from "../api/memory";
 import { exportUrl, getSession, setSessionMode, submitAnswers } from "../api/refinement";
+import DecisionReportView from "../components/DecisionReportView";
 import { GRID_LABELS } from "../constants/grids";
 import { useI18n } from "../i18n";
-import type { QuestionItem, QuestionRoundModel, SessionDetailResponse } from "../types/api";
+import type {
+  ProductMemoryItem,
+  QuestionItem,
+  QuestionRoundModel,
+  SessionDetailResponse,
+} from "../types/api";
 
 const LOGO_URL =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuCW8Ydnt1pjaSuuOkoaNpK1bp7aL7xVEgZAfXu4_neIosXkFUY8fo12xP_7XfMCd5zqMPdCevOiuoIYykQoU54l85QQLB-BZJSCDd_g3XlCDrD7CpUKO31N87WHuGyh0IDgl8VMQpqPoASztCeXDwjnvcgt6Z0dE5ejZxtDqgqdkEkxTfwH5Ptb1QeXYEj6veWO7sCIaJSw3dhJCH8ErNWSug3IN5wx5RNL-za3Oo-Oc_JJ8__8SL3-";
@@ -138,6 +145,121 @@ function RoundDivider({ round }: { round: number }) {
 
 type Tab = "brief" | "plan" | "code";
 
+// Round 0 pre-flight: what the tool assumes it already knows about the product.
+// Correcting or removing a line writes straight to the memory — that feedback loop
+// is what keeps it trustworthy over time, so it never edits a local copy only.
+function MemoryBanner({
+  facts,
+  defaultOpen,
+  onChange,
+}: {
+  facts: ProductMemoryItem[];
+  defaultOpen: boolean;
+  onChange: (facts: ProductMemoryItem[]) => void;
+}) {
+  const { t, label } = useI18n();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function commit(fact: ProductMemoryItem) {
+    const statement = draft.trim();
+    if (!statement || statement === fact.statement) {
+      setEditingId(null);
+      return;
+    }
+    setBusyId(fact.id);
+    try {
+      const updated = await updateMemoryFact(fact.id, { statement });
+      onChange(facts.map((row) => (row.id === fact.id ? updated : row)));
+    } finally {
+      setBusyId(null);
+      setEditingId(null);
+    }
+  }
+
+  async function remove(fact: ProductMemoryItem) {
+    setBusyId(fact.id);
+    try {
+      await archiveMemoryFact(fact.id);
+      onChange(facts.filter((row) => row.id !== fact.id));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <details open={defaultOpen} className="border-b border-border-subtle bg-surface-container-lowest">
+      <summary className="cursor-pointer list-none px-4 py-3">
+        <span className="flex items-center gap-2">
+          <span className="material-symbols-outlined text-[16px] text-primary">database</span>
+          <span className="flex-1 font-label-md text-label-md uppercase tracking-wider text-on-surface-variant">
+            {t("memory.known_title")}
+          </span>
+          <span className="rounded-full bg-primary-container/15 px-2 py-0.5 text-[11px] font-bold text-primary">
+            {facts.length}
+          </span>
+        </span>
+      </summary>
+      <div className="px-4 pb-3">
+        <p className="mb-2 text-[11px] leading-snug text-outline">{t("memory.known_hint")}</p>
+        <ul className="flex list-none flex-col gap-1 p-0">
+          {facts.map((fact) => (
+            <li key={fact.id} className="group flex items-start gap-1 text-xs text-on-surface-variant">
+              {editingId === fact.id ? (
+                <input
+                  autoFocus
+                  value={draft}
+                  disabled={busyId === fact.id}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void commit(fact);
+                    }
+                    if (event.key === "Escape") setEditingId(null);
+                  }}
+                  onBlur={() => setEditingId(null)}
+                  className="w-full rounded border border-primary bg-surface px-1 py-0.5 text-xs text-on-surface outline-none"
+                />
+              ) : (
+                <>
+                  <span className="flex-1 leading-snug">
+                    <span className="mr-1 text-[10px] uppercase tracking-wider text-outline">
+                      {label("category", fact.category)}
+                    </span>
+                    {fact.statement}
+                  </span>
+                  <button
+                    type="button"
+                    title={t("memory.correct")}
+                    onClick={() => {
+                      setDraft(fact.statement);
+                      setEditingId(fact.id);
+                    }}
+                    className="shrink-0 border-0 bg-transparent p-0 text-on-surface-variant opacity-0 transition-opacity hover:text-primary group-hover:opacity-100"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    title={t("memory.remove")}
+                    disabled={busyId === fact.id}
+                    onClick={() => void remove(fact)}
+                    className="shrink-0 border-0 bg-transparent p-0 text-on-surface-variant opacity-0 transition-opacity hover:text-error group-hover:opacity-100"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">close</span>
+                  </button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </details>
+  );
+}
+
 export default function WarRoom() {
   const { sessionId = "" } = useParams();
   const { t, label } = useI18n();
@@ -161,6 +283,9 @@ export default function WarRoom() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const [tab, setTab] = useState<Tab>("brief");
+  // Local mirror of the injected memory so corrections show immediately; the writes
+  // themselves go to the API, not to this array.
+  const [memory, setMemory] = useState<ProductMemoryItem[]>([]);
   const chatRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -169,7 +294,9 @@ export default function WarRoom() {
     setLoadError(null);
     getSession(sessionId)
       .then((payload) => {
-        if (!cancelled) setDetail(payload);
+        if (cancelled) return;
+        setDetail(payload);
+        setMemory(payload.productMemory);
       })
       .catch((error: unknown) => {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : String(error));
@@ -253,7 +380,7 @@ export default function WarRoom() {
   const sentCount = Object.keys(sent).length;
   const openRound = detail?.currentQuestionRound?.round ?? null;
   const focusKey =
-    activeQuestion && openRound !== null && (themeFilter || sent[activeQuestion.id] !== undefined)
+    activeQuestion && openRound !== null && !submitting
       ? `${openRound}-${activeQuestion.id}`
       : null;
   useEffect(() => {
@@ -283,6 +410,7 @@ export default function WarRoom() {
 
   const { session, subject, sessionSummary, deliverable } = detail;
   const groups = groupByTheme(entries);
+  const themeStyles = new Map(groups.map((group) => [group.theme, group.style]));
   const answeredCount = openQuestions.filter((q) => (sent[q.id] ?? "").trim().length > 0).length;
   const openCount = Math.max(openQuestions.length - answeredCount, 0);
   const tensionCount = sessionSummary.risks.length;
@@ -440,6 +568,9 @@ export default function WarRoom() {
             </div>
             <p className="font-headline-md text-sm leading-tight text-on-surface">{subject.title}</p>
           </div>
+          {memory.length > 0 && (
+            <MemoryBanner facts={memory} defaultOpen={session.round <= 1} onChange={setMemory} />
+          )}
           <div className="p-4">
             <div className="tree-line relative flex flex-col gap-1">
               {groups.length === 0 && (
@@ -505,7 +636,7 @@ export default function WarRoom() {
 
         {/* ZONE 2: Decision War Room */}
         <main className="flex flex-1 flex-col overflow-y-auto bg-canvas-bg">
-          <div className="mx-auto flex w-full max-w-[900px] flex-1 flex-col gap-6 p-6">
+          <div className="mx-auto flex min-h-0 w-full max-w-[900px] flex-1 flex-col gap-6 p-6">
             {/* Grid suggestion */}
             {suggestion && (
               <div className="flex items-center justify-between gap-3 rounded-lg border border-primary-fixed bg-primary-container/10 px-4 py-3">
@@ -631,7 +762,7 @@ export default function WarRoom() {
                 </div>
               )}
 
-              <div className="flex flex-1 flex-col gap-4 p-6">
+              <div className="flex min-h-0 flex-1 flex-col gap-4 p-6">
                 {/* Chat feed */}
                 <div
                   ref={chatRef}
@@ -698,10 +829,21 @@ export default function WarRoom() {
 
                       if (answer !== null && answer.trim()) {
                         bubbles.push(
-                          <div key={`a-${key}`} className="flex justify-end">
+                          <div key={`a-${key}`} className="flex flex-col items-end gap-1">
                             <div className="max-w-[75%] rounded-xl rounded-tr-none bg-primary-container p-4 text-on-primary shadow-sm">
                               <p className="font-body-md text-body-lg">{answer}</p>
                             </div>
+                            {inOpenRound && !busy && (
+                              <button
+                                type="button"
+                                onClick={() => focusQuestion(question)}
+                                title="Corriger cette réponse"
+                                className="flex items-center gap-1 rounded-full border border-border-subtle bg-surface px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant transition-colors hover:bg-surface-container-low"
+                              >
+                                <span className="material-symbols-outlined text-[14px]">edit</span>
+                                Modifier
+                              </button>
+                            )}
                           </div>,
                         );
                       } else if (!inOpenRound) {
@@ -892,6 +1034,10 @@ export default function WarRoom() {
               {subject.title}
             </h1>
 
+            {deliverable?.decisionReport && (
+              <DecisionReportView report={deliverable.decisionReport} variant="banner" />
+            )}
+
             {tab === "brief" &&
               (deliverable ? (
                 <>
@@ -899,7 +1045,12 @@ export default function WarRoom() {
                     <p className="mb-4 leading-relaxed text-on-surface-variant">{deliverable.summary}</p>
                   )}
                   {deliverable.brief.map((section, index) => (
-                    <Section key={index} heading={section.heading} items={section.items} />
+                    <Section
+                      key={index}
+                      heading={section.heading}
+                      items={section.items}
+                      style={themeStyles.get(section.heading) ?? THEME_STYLES[0]}
+                    />
                   ))}
                   <div className="mt-6">
                     <Link
@@ -954,11 +1105,19 @@ export default function WarRoom() {
   );
 }
 
-function Section({ heading, items }: { heading: string; items: string[] }) {
+function Section({
+  heading,
+  items,
+  style = THEME_STYLES[0],
+}: {
+  heading: string;
+  items: string[];
+  style?: (typeof THEME_STYLES)[number];
+}) {
   return (
     <div className="mb-4">
-      <h3 className="mb-2 mt-6 flex items-center gap-2 text-lg font-bold text-node-blue">
-        <span className="material-symbols-outlined text-[18px]">subject</span>
+      <h3 className={`mb-2 mt-6 flex items-center gap-2 text-lg font-bold ${style.text}`}>
+        <span className="material-symbols-outlined text-[18px]">{style.icon}</span>
         {heading}
       </h3>
       {items && items.length > 0 ? (

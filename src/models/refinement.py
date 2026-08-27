@@ -30,6 +30,8 @@ class RefinementSession(Base):
 
     id = Column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(64), ForeignKey("users.id"), nullable=False, index=True)
+    # Nullable: sessions created before product memory existed carry no product.
+    product_id = Column(String(64), ForeignKey("products.id"), nullable=True, index=True)
     subject_id = Column(String(128), nullable=False, index=True)
     subject_title = Column(String(512), nullable=True)
     mode = Column(String(32), nullable=False, default="auto")

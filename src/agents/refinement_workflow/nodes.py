@@ -4,6 +4,7 @@ from typing import Any, Awaitable, Callable
 
 from src.api.schemas_refinement import (
     GenerateQuestionsOutput,
+    ProductMemoryOpsOutput,
     RefinementDeliverableOutput,
     SessionSummaryOutput,
 )
@@ -20,6 +21,7 @@ def _base_context(state: dict[str, Any]) -> dict[str, Any]:
         "grid": grid,
         "grid_axes": grid_axes(grid),
         "extra_context": state.get("extra_context", ""),
+        "product_memory": state.get("product_memory", []),
         "round": state.get("round", 0),
         "asked_questions": state.get("asked_questions", []),
         "answers": state.get("answers", []),
@@ -28,6 +30,8 @@ def _base_context(state: dict[str, Any]) -> dict[str, Any]:
         "unknowns": state.get("unknowns", []),
         "dependencies": state.get("dependencies", []),
         "risks": state.get("risks", []),
+        "confidence": state.get("confidence", "low"),
+        "enough_context": state.get("enough_context", False),
     }
 
 
@@ -101,3 +105,15 @@ def build_generate_final_refinement_node(
         }
 
     return generate_final_refinement_node
+
+
+def build_extract_product_memory_node(
+    llm,
+) -> Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]:
+    async def extract_product_memory_node(state: dict[str, Any]) -> dict[str, Any]:
+        # Terminal node: it only decides what to remember. Persistence belongs to the
+        # service, like every other node's output.
+        output: ProductMemoryOpsOutput = await llm.extract_product_memory(_base_context(state))
+        return {"memory_ops": [op.model_dump() for op in output.ops]}
+
+    return extract_product_memory_node

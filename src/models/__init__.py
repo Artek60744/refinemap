@@ -1,4 +1,5 @@
 from src.models.app_settings import AppSetting
+from src.models.product_memory import Product, ProductMemoryFact
 from src.models.refinement import (
     Answer,
     Question,
@@ -13,6 +14,8 @@ from src.models.refinement import (
 __all__ = [
     "AppSetting",
     "Answer",
+    "Product",
+    "ProductMemoryFact",
     "Question",
     "QuestionRound",
     "RefinementSession",

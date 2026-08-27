@@ -14,12 +14,12 @@ export default function TopNavBar({
   active,
   children,
 }: {
-  active: "dashboard" | "history";
+  active: "dashboard" | "history" | "memory";
   children?: ReactNode;
 }) {
   const { t } = useI18n();
 
-  function linkClass(target: "dashboard" | "history"): string {
+  function linkClass(target: "dashboard" | "history" | "memory"): string {
     return `${LINK_BASE} ${
       target === active
         ? "border-b-2 border-primary font-bold text-primary"
@@ -42,6 +42,9 @@ export default function TopNavBar({
           </Link>
           <Link to="/refinement/history" className={linkClass("history")}>
             {t("nav.history")}
+          </Link>
+          <Link to="/memory" className={linkClass("memory")}>
+            {t("nav.memory")}
           </Link>
         </nav>
       </div>

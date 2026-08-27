@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 
+from src.api.product_memory import router as product_memory_api_router
 from src.api.refinement import router as refinement_api_router
 from src.api.settings import router as settings_api_router
 from src.config.settings import settings
@@ -54,6 +55,7 @@ class LanguageMiddleware:
 app.add_middleware(LanguageMiddleware)
 
 app.include_router(refinement_api_router)
+app.include_router(product_memory_api_router)
 app.include_router(settings_api_router)
 
 

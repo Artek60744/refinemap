@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Deploy / update the Refinement Assistant on its Azure VM.
-# See docs/deployment.md for the full guide.
+# See openwiki/operations/deployment.md for the full guide.
 #
 set -euo pipefail
 
