@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -26,8 +27,12 @@ _NO_ANSWER = "Je ne sais pas."
 
 
 def slugify(text: str, fallback: str = "refinement") -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-    return (slug[:60] or fallback).strip("-")
+    # Strip accents rather than let them become separators: "système" should give
+    # "systeme", not "syst-me".
+    folded = unicodedata.normalize("NFKD", text)
+    ascii_text = folded.encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_text.lower()).strip("-")
+    return (slug[:60].strip("-") or fallback)
 
 
 def default_output_path(title: str) -> Path:

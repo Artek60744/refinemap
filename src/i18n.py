@@ -12,8 +12,13 @@ from __future__ import annotations
 
 import logging
 from contextvars import ContextVar
+from typing import TYPE_CHECKING
 
-from fastapi import Request
+if TYPE_CHECKING:
+    # Only `resolve_language` needs it, and only for the annotation — which
+    # `from __future__ import annotations` never evaluates. Importing it eagerly
+    # would drag FastAPI into the CLI, where the web layer is not installed.
+    from fastapi import Request
 
 logger = logging.getLogger(__name__)
 

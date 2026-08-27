@@ -57,5 +57,9 @@ packages = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# conftest.py imports `src`, which only lands on sys.path automatically under
+# `python -m pytest`. Without this, a bare `pytest` — what CI runs — fails to
+# collect.
+pythonpath = ["."]
 # The suite marks its async tests explicitly with @pytest.mark.asyncio.
 asyncio_mode = "strict"

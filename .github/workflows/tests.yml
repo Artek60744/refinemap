@@ -1,0 +1,57 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        # LLM_PROVIDER=mock keeps the suite offline even if a fixture forgets to
+        # patch the engine: no CI run should ever reach a real provider.
+        env:
+          LLM_PROVIDER: mock
+        run: pytest -q
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build the wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel
+
+      - name: Check the CLI runs from the built wheel
+        # Installed from a wheel there is no repo root, so this is what catches a
+        # prompts/ directory that failed to ship (see Settings.prompts_dir).
+        run: |
+          pip install dist/*.whl
+          cd "$(mktemp -d)"
+          refinemap --help
+          LLM_PROVIDER=mock refinemap config
