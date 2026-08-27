@@ -6,7 +6,7 @@ repars avec un verdict explicite (Go / Explore / Rework / Drop), ses causes raci
 blocages, et un fichier prêt à être lu — par toi ou par ton agent de code.
 
 ```bash
-pipx install git+https://github.com/Artek60744/refinement   # pas encore sur PyPI
+pipx install git+https://github.com/Artek60744/refinemap   # pas encore sur PyPI
 refinemap refine "Ajouter un système de notifications"
 # → .refinemap/ajouter-un-systeme-de-notifications-20260827-2120.md
 ```
