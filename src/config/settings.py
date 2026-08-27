@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     llm_provider: str = "mock"
     llm_temperature: float = 0.2
     llm_max_tokens: int = 4000
+
+    # Provider-agnostic overrides. These are what the CLI and the README use:
+    # without them the only way to pick a model is the web settings page, which a
+    # terminal-first tool must not require. Precedence, lowest to highest:
+    # provider-specific vars below < these < a value saved from the settings page.
+    llm_model: str = ""
+    llm_api_key: str = ""
+    llm_endpoint: str = ""
+    llm_deployment: str = ""
     azure_ai_endpoint: str = ""
     azure_ai_key: str = ""
     azure_ai_model_id: str = ""

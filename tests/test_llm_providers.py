@@ -62,6 +62,38 @@ def test_connection_test_accepts_ollama_without_a_key(db, model, expected):
     assert result.success is expected
 
 
+def test_generic_llm_env_vars_are_honoured(db, monkeypatch):
+    """LLM_MODEL / LLM_API_KEY / LLM_ENDPOINT must configure the engine on their own.
+
+    Without them the only way to pick a model is the web settings page, which
+    makes the CLI unusable standalone — the bug this test pins down.
+    """
+    monkeypatch.setattr("src.services.settings_service.settings.llm_provider", "ollama")
+    monkeypatch.setattr("src.services.settings_service.settings.llm_model", "qwen3:4b")
+    monkeypatch.setattr("src.services.settings_service.settings.llm_endpoint", "http://box:11434/v1")
+
+    runtime = SettingsService(db).get_runtime_config()
+
+    assert runtime.llm.model == "qwen3:4b"
+    assert runtime.llm.endpoint == "http://box:11434/v1"
+
+
+def test_generic_model_wins_over_the_provider_specific_default(db, monkeypatch):
+    monkeypatch.setattr("src.services.settings_service.settings.llm_provider", "ollama")
+    monkeypatch.setattr("src.services.settings_service.settings.ollama_model", "qwen3")
+    monkeypatch.setattr("src.services.settings_service.settings.llm_model", "mistral")
+
+    assert SettingsService(db).get_runtime_config().llm.model == "mistral"
+
+
+def test_provider_specific_default_still_applies_without_an_override(db, monkeypatch):
+    monkeypatch.setattr("src.services.settings_service.settings.llm_provider", "ollama")
+    monkeypatch.setattr("src.services.settings_service.settings.ollama_model", "qwen3")
+    monkeypatch.setattr("src.services.settings_service.settings.llm_model", "")
+
+    assert SettingsService(db).get_runtime_config().llm.model == "qwen3"
+
+
 def test_ollama_never_inherits_another_provider_s_key(db, monkeypatch):
     """Falling back to the Azure/OpenAI key would ship a real credential to a
     local endpoint."""

@@ -84,8 +84,9 @@ class SettingsService:
             model_fallback = settings.deepseek_model
             endpoint_fallback = settings.deepseek_endpoint
         elif provider == "ollama":
-            # No key fallback on purpose: inheriting an Azure/OpenAI key here would
-            # ship a real credential to a local endpoint.
+            # Never inherit an Azure/OpenAI key here: that would ship a real
+            # credential to a local endpoint. Only an explicit LLM_API_KEY passes,
+            # for the rare local gateway that wants one.
             key_fallback = ""
             model_fallback = settings.ollama_model
             endpoint_fallback = settings.ollama_endpoint
@@ -94,13 +95,23 @@ class SettingsService:
             model_fallback = settings.openai_model
             endpoint_fallback = settings.azure_ai_endpoint
 
+        # The generic LLM_* variables win over the provider-specific ones, and are
+        # themselves overridden by anything saved from the settings page.
         return RuntimeConfig(
             llm=LlmRuntimeConfig(
                 provider=provider,
-                endpoint=self._get_setting_value(SettingKeys.LLM_ENDPOINT, endpoint_fallback),
-                api_key=self._get_secret_value(SettingKeys.LLM_API_KEY, key_fallback),
-                deployment=self._get_setting_value(SettingKeys.LLM_DEPLOYMENT, settings.azure_ai_model_id),
-                model=self._get_setting_value(SettingKeys.LLM_MODEL, model_fallback),
+                endpoint=self._get_setting_value(
+                    SettingKeys.LLM_ENDPOINT, settings.llm_endpoint or endpoint_fallback
+                ),
+                api_key=self._get_secret_value(
+                    SettingKeys.LLM_API_KEY, settings.llm_api_key or key_fallback
+                ),
+                deployment=self._get_setting_value(
+                    SettingKeys.LLM_DEPLOYMENT, settings.llm_deployment or settings.azure_ai_model_id
+                ),
+                model=self._get_setting_value(
+                    SettingKeys.LLM_MODEL, settings.llm_model or model_fallback
+                ),
             ),
         )
 
